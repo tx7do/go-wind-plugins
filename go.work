@@ -34,12 +34,16 @@ use (
 	./config/polaris
 	./config/redis
 	./encoding
-	./encoding/json
-	./encoding/proto
+	./encoding/avro
+	./encoding/bson
+	./encoding/cbor
+	./encoding/flatbuffers
 	./encoding/gob
+	./encoding/json
 	./encoding/msgpack
-	./encoding/toml
+	./encoding/proto
 	./encoding/thrift
+	./encoding/toml
 	./encoding/xml
 	./encoding/yaml
 	./log
