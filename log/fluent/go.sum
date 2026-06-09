@@ -1,0 +1,8 @@
+github.com/fluent/fluent-logger-golang v1.10.1 h1:wu54iN1O2afll5oQrtTjhgZRwWcfOeFFzwRsEkABfFQ=
+github.com/fluent/fluent-logger-golang v1.10.1/go.mod h1:qOuXG4ZMrXaSTk12ua+uAb21xfNYOzn0roAtp7mfGAE=
+github.com/philhofer/fwd v1.2.0 h1:e6DnBTl7vGY+Gz322/ASL4Gyp1FspeMvx1RNDoToZuM=
+github.com/philhofer/fwd v1.2.0/go.mod h1:RqIHx9QI14HlwKwm98g9Re5prTQ6LdeRQn+gXJFxsJM=
+github.com/tinylib/msgp v1.6.4 h1:mOwYbyYDLPj35mkA2BjjYejgJk9BuHxDdvRnb6v2ZcQ=
+github.com/tinylib/msgp v1.6.4/go.mod h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77roAqEA=
+github.com/tx7do/go-wind v0.0.0-20260609092115-0a5df91d8c74 h1:ZjWjGHob5Da0WYWO+5GnKNkb0nKRMcK6JTqmiZTAu7A=
+github.com/tx7do/go-wind v0.0.0-20260609092115-0a5df91d8c74/go.mod h1:hV4pLNXbNZThZf44JqG73xhDEmkujyN5VM1oX56c+ig=

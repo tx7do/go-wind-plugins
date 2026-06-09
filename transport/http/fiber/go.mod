@@ -2,18 +2,21 @@ module github.com/tx7do/go-wind-plugins/transport/http/fiber
 
 go 1.26.3
 
-require github.com/gofiber/fiber/v2 v2.52.12
+require (
+	github.com/gofiber/fiber/v2 v2.52.12
+	github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260609092514-978e7462fe25
+)
 
 require (
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.2.1 // indirect
+	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-isatty v0.0.21 // indirect
+	github.com/mattn/go-runewidth v0.0.23 // indirect
+	github.com/tx7do/go-wind v0.0.0-20260609092115-0a5df91d8c74 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.51.0 // indirect
-	github.com/valyala/tcplisten v1.0.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	github.com/valyala/fasthttp v1.70.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 )

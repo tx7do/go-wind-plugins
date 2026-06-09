@@ -2,8 +2,28 @@ go 1.26.3
 
 use (
 	./config
+	./config/apollo
+	./config/consul
+	./config/etcd
+	./config/kubernetes
+	./config/nacos
+	./config/polaris
 	./log
+	./log/aliyun
+	./log/fluent
+	./log/logrus
+	./log/tencent
+	./log/zap
+	./log/zerolog
 	./registry
+	./registry/consul
+	./registry/etcd
+	./registry/eureka
+	./registry/kubernetes
+	./registry/nacos
+	./registry/polaris
+	./registry/servicecomb
+	./registry/zookeeper
 	./transport/grpc
 	./transport/http
 	./transport/http/gin
