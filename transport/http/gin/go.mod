@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260609144701-fa91c1013ecd
+	github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260609151257-73001c5d218e
 )
 
 require (
