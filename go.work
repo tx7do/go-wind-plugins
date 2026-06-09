@@ -49,6 +49,7 @@ use (
 	./encoding/toml
 	./encoding/xml
 	./encoding/yaml
+	./health
 	./log
 	./log/aliyun
 	./log/fluent
@@ -80,8 +81,12 @@ use (
 	./transport/grpc/client
 	./transport/grpc/server
 	./transport/http
-	./transport/http/gin
 	./transport/http/fiber
+	./transport/http/gin
+	./transport/http/middleware/logging
+	./transport/http/middleware/recovery
+	./transport/http/middleware/tracing
+	./transport/http/middleware/validate
 	./workflow
 	./workflow/argo
 	./workflow/conductor
