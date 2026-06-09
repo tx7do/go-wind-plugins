@@ -1,0 +1,11 @@
+go 1.26.3
+
+use (
+	./config
+	./log
+	./registry
+	./transport/grpc
+	./transport/http
+	./transport/http/gin
+	./transport/http/fiber
+)
