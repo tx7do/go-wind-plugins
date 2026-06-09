@@ -52,11 +52,15 @@ use (
 	./health
 	./log
 	./log/aliyun
+	./log/charm
 	./log/cloudwatch
 	./log/fluent
+	./log/glog
 	./log/hclog
+	./log/loki
 	./log/logrus
 	./log/phuslu
+	./log/sentry
 	./log/tencent
 	./log/zap
 	./log/zerolog
