@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260609151257-73001c5d218e
+	github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260610014433-143b4330b5d4
 )
 
 require (
@@ -34,7 +34,7 @@ require (
 	go.mongodb.org/mongo-driver/v2 v2.5.1 // indirect
 	golang.org/x/arch v0.26.0 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect

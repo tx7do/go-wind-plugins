@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.12
-	github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260609151257-73001c5d218e
+	github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260610014433-143b4330b5d4
 )
 
 require (

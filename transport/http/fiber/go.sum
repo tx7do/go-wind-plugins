@@ -16,8 +16,8 @@ github.com/mattn/go-runewidth v0.0.23 h1:7ykA0T0jkPpzSvMS5i9uoNn2Xy3R383f9HDx3Ry
 github.com/mattn/go-runewidth v0.0.23/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
 github.com/tx7do/go-wind v0.0.1 h1:D7UdMqCQPNWDwoC2PFFWV87y0n4apxZ3Zg+2mHrulL0=
 github.com/tx7do/go-wind v0.0.1/go.mod h1:hV4pLNXbNZThZf44JqG73xhDEmkujyN5VM1oX56c+ig=
-github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260609151257-73001c5d218e h1:D4ZrDFzcpx67zrDWM3sT/pSIPPMIQPF7SKKuxHvLL1g=
-github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260609151257-73001c5d218e/go.mod h1:i9KCSh39+WRYCm2mQ06OSjXmfI3PSZdJ+VLr23JiwAY=
+github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260610014433-143b4330b5d4 h1:B6HkgIyMQgmwPLPrCsATEuULS2ZMovj6xb0OhYSlt1k=
+github.com/tx7do/go-wind-plugins/transport/http v0.0.0-20260610014433-143b4330b5d4/go.mod h1:i9KCSh39+WRYCm2mQ06OSjXmfI3PSZdJ+VLr23JiwAY=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasthttp v1.70.0 h1:LAhMGcWk13QZWm85+eg8ZBNbrq5mnkWFGbHMUJHIdXA=

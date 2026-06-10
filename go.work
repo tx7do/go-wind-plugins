@@ -70,7 +70,13 @@ use (
 	./metrics/prometheus
 	./retry
 	./security/authn
+	./security/authn/jwt
+	./security/authn/oidc
+	./security/authn/presharedkey
 	./security/authz
+	./security/authz/casbin
+	./security/authz/opa
+	./security/authz/zanzibar
 	./oss/minio
 	./oss/s3
 	./ratelimit
@@ -93,6 +99,7 @@ use (
 	./transport/http
 	./transport/http/fiber
 	./transport/http/gin
+	./transport/http/middleware/authn
 	./transport/http/middleware/logging
 	./transport/http/middleware/recovery
 	./transport/http/middleware/tracing
