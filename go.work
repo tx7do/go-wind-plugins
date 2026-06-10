@@ -39,8 +39,6 @@ use (
 	./encoding
 	./encoding/avro
 
-	// --- Examples ---
-	./examples
 	./encoding/bson
 	./encoding/cbor
 	./encoding/flatbuffers
@@ -160,4 +158,7 @@ use (
 	./workflow/conductor
 	./workflow/goworkflows
 	./workflow/temporal
+
+	// --- Examples (underscore prefix: excluded from go build ./...) ---
+	./_examples
 )
