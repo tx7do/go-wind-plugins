@@ -21,6 +21,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 )
 
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000 // indirect
+
 require (
 	github.com/AthenZ/athenz v1.12.42 // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
@@ -63,7 +65,7 @@ require (
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/tracer/otlp v1.1.2 // indirect
+	// indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect

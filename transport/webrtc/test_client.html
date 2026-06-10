@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebRTC SFU Test Client</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; line-height: 1.4; }
+    .row { margin-bottom: 10px; }
+    label { display: inline-block; width: 170px; }
+    input, select, textarea, button { font-size: 14px; }
+    input, select, textarea { width: 420px; max-width: 100%; }
+    textarea { height: 100px; }
+    #log { width: 100%; height: 260px; white-space: pre-wrap; }
+    .buttons button { margin-right: 8px; }
+    .buttons button:disabled { 
+      opacity: 0.5; 
+      cursor: not-allowed; 
+    }
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .status-disconnected { background-color: #ccc; }
+    .status-connecting { background-color: #ffa500; animation: pulse 1s infinite; }
+    .status-connected { background-color: #4caf50; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    video { width: 320px; height: 240px; border: 1px solid #ccc; margin: 5px; background: #000; }
+    .video-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .section { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 4px; }
+    h3 { margin-top: 0; color: #333; }
+  </style>
+</head>
+<body>
+  <h2>WebRTC SFU Test Client</h2>
+
+  <div class="section">
+    <h3>🔧 Connection Settings</h3>
+    <div class="row">
+      <label for="signalUrl">Signal URL</label>
+      <input id="signalUrl" type="text" value="http://127.0.0.1:9999/signal" />
+    </div>
+
+    <div class="row">
+      <label for="authToken">Authorization</label>
+      <input id="authToken" type="text" placeholder="Bearer xxx (optional)" />
+    </div>
+
+    <div class="row">
+      <label for="dcLabel">DataChannel Label</label>
+      <input id="dcLabel" type="text" value="webrtc" />
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>📹 Media Settings</h3>
+    <div class="row">
+      <label for="enableAudio">Enable Audio</label>
+      <input id="enableAudio" type="checkbox" checked />
+    </div>
+
+    <div class="row">
+      <label for="enableVideo">Enable Video</label>
+      <input id="enableVideo" type="checkbox" />
+    </div>
+
+    <div class="row">
+      <label for="audioDevice">Audio Device</label>
+      <select id="audioDevice"><option value="">Default</option></select>
+    </div>
+
+    <div class="row">
+      <label for="videoDevice">Video Device</label>
+      <select id="videoDevice"><option value="">Default</option></select>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>💬 Data Channel Messages</h3>
+    <div class="row">
+      <label for="packetMode">Packet Mode</label>
+      <select id="packetMode">
+        <option value="binary" selected>binary (type[4 bytes LE] + payload)</option>
+        <option value="text">text ({"type":n,"payload":"..."})</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="messageType">Message Type</label>
+      <input id="messageType" type="number" value="1" />
+    </div>
+
+    <div class="row">
+      <label for="payload">Payload (JSON/Text)</label>
+      <textarea id="payload">{"type":1,"sender":"browser","message":"hello"}</textarea>
+    </div>
+
+    <div class="row buttons">
+      <button id="connectBtn">🔗 Connect</button>
+      <button id="disconnectBtn" disabled>❌ Disconnect</button>
+      <button id="sendBtn" disabled>📤 Send Message</button>
+      <span id="connectionStatus" style="margin-left: 10px; font-weight: bold;">
+        <span class="status-indicator status-disconnected"></span>
+        <span id="statusText">Disconnected</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>🎥 Video Streams</h3>
+    <div class="row">
+      <label>Local Video</label>
+      <video id="localVideo" autoplay muted playsinline></video>
+    </div>
+    <div class="video-container" id="remoteVideos">
+      <!-- Remote videos will be added here dynamically -->
+    </div>
+  </div>
+
+  <div class="row">
+    <label for="log">Log</label>
+    <textarea id="log" readonly></textarea>
+  </div>
+
+  <script>
+    let pc = null;
+    let dc = null;
+    let localStream = null;
+
+    const signalUrlEl = document.getElementById("signalUrl");
+    const authTokenEl = document.getElementById("authToken");
+    const dcLabelEl = document.getElementById("dcLabel");
+    const packetModeEl = document.getElementById("packetMode");
+    const messageTypeEl = document.getElementById("messageType");
+    const payloadEl = document.getElementById("payload");
+    const logEl = document.getElementById("log");
+    const enableAudioEl = document.getElementById("enableAudio");
+    const enableVideoEl = document.getElementById("enableVideo");
+    const audioDeviceEl = document.getElementById("audioDevice");
+    const videoDeviceEl = document.getElementById("videoDevice");
+    const localVideoEl = document.getElementById("localVideo");
+    const remoteVideosEl = document.getElementById("remoteVideos");
+
+    const connectBtn = document.getElementById("connectBtn");
+    const disconnectBtn = document.getElementById("disconnectBtn");
+    const sendBtn = document.getElementById("sendBtn");
+    const statusIndicator = document.querySelector("#connectionStatus .status-indicator");
+    const statusText = document.getElementById("statusText");
+
+    connectBtn.addEventListener("click", connect);
+    disconnectBtn.addEventListener("click", disconnect);
+    sendBtn.addEventListener("click", sendMessage);
+
+    function setConnectionState(state) {
+      switch (state) {
+        case 'connecting':
+          connectBtn.disabled = true;
+          disconnectBtn.disabled = true;
+          sendBtn.disabled = true;
+          statusIndicator.className = 'status-indicator status-connecting';
+          statusText.textContent = 'Connecting...';
+          break;
+        case 'connected':
+          connectBtn.disabled = true;
+          disconnectBtn.disabled = false;
+          sendBtn.disabled = false;
+          statusIndicator.className = 'status-indicator status-connected';
+          statusText.textContent = 'Connected';
+          break;
+        case 'disconnected':
+          connectBtn.disabled = false;
+          disconnectBtn.disabled = true;
+          sendBtn.disabled = true;
+          statusIndicator.className = 'status-indicator status-disconnected';
+          statusText.textContent = 'Disconnected';
+          break;
+      }
+    }
+
+    // Initialize state
+    setConnectionState('disconnected');
+
+    // Enumerate media devices
+    async function enumerateDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        
+        const audioSelect = document.getElementById("audioDevice");
+        const videoSelect = document.getElementById("videoDevice");
+        
+        devices.forEach(device => {
+          const option = document.createElement("option");
+          option.value = device.deviceId;
+          option.text = device.label || `${device.kind} (${device.deviceId.substring(0, 8)}...)`;
+          
+          if (device.kind === "audioinput") {
+            audioSelect.appendChild(option);
+          } else if (device.kind === "videoinput") {
+            videoSelect.appendChild(option);
+          }
+        });
+        
+        log("Media devices enumerated");
+      } catch (err) {
+        log(`Failed to enumerate devices: ${err.message}`);
+      }
+    }
+
+    // Initialize on load
+    enumerateDevices();
+
+    function log(msg) {
+      const time = new Date().toISOString();
+      logEl.value += `[${time}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+
+    function toUint8(text) {
+      return new TextEncoder().encode(text);
+    }
+
+    function fromUint8(data) {
+      return new TextDecoder().decode(data);
+    }
+
+    function buildBinaryPacket(type, payloadText) {
+      const payload = toUint8(payloadText);
+      const out = new Uint8Array(4 + payload.length);
+      const view = new DataView(out.buffer);
+      view.setUint32(0, Number(type), true);
+      out.set(payload, 4);
+      return out;
+    }
+
+    function parseBinaryPacket(buf) {
+      if (buf.byteLength < 4) {
+        return { type: 0, payload: "<invalid packet>" };
+      }
+      const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+      const type = view.getUint32(0, true);
+      const payload = fromUint8(buf.subarray(4));
+      return { type, payload };
+    }
+
+    async function connect() {
+      if (pc) {
+        log("Already connected or connecting. Disconnecting first...");
+        // 先关闭现有连接
+        await disconnect();
+        // 等待一小段时间确保资源释放
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      setConnectionState('connecting');
+
+      try {
+        pc = new RTCPeerConnection({ 
+          iceServers: [
+            // 优先使用国内 STUN 服务器
+            { urls: "stun:stun.miwifi.com" },
+            { urls: "stun:stun.qq.com" },
+            { urls: "stun:stun.bige0.com" },
+            // 备用 Google STUN
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" }
+          ],
+          // 优化 ICE 配置
+          iceCandidatePoolSize: 10,
+          bundlePolicy: 'max-bundle',
+          rtcpMuxPolicy: 'require'
+        });
+
+        // Get local media stream
+        const constraints = {
+          audio: enableAudioEl.checked ? {
+            deviceId: audioDeviceEl.value ? { exact: audioDeviceEl.value } : undefined
+          } : false,
+          video: enableVideoEl.checked ? {
+            deviceId: videoDeviceEl.value ? { exact: videoDeviceEl.value } : undefined,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          } : false
+        };
+
+        if (constraints.audio || constraints.video) {
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            localVideoEl.srcObject = localStream;
+            log(`Local media stream obtained: audio=${!!constraints.audio}, video=${!!constraints.video}`);
+            
+            // Add tracks to peer connection
+            localStream.getTracks().forEach(track => {
+              pc.addTrack(track, localStream);
+              log(`Added ${track.kind} track: ${track.label}`);
+            });
+          } catch (err) {
+            log(`Failed to get user media: ${err.message}`);
+            // Continue without media
+          }
+        }
+
+        dc = pc.createDataChannel(dcLabelEl.value || "webrtc");
+
+        // Set up data channel event handlers
+        let dcOpenResolve, dcOpenReject;
+        let dcOpened = false;
+        const dcOpenPromise = new Promise((resolve, reject) => {
+          dcOpenResolve = resolve;
+          dcOpenReject = reject;
+        });
+
+        // Use a longer timeout (30 seconds) for DataChannel to open
+        const openTimeout = setTimeout(() => {
+          if (!dcOpened) {
+            log(`⚠ DataChannel still not open after 30s, but continuing anyway...`);
+            // Don't reject, just continue - the channel might open later
+          }
+        }, 30000);
+
+        dc.onopen = () => {
+          clearTimeout(openTimeout);
+          dcOpened = true;
+          log("✓ DataChannel opened");
+          dcOpenResolve();
+        };
+        
+        dc.onerror = (e) => {
+          if (!dcOpened) {
+            clearTimeout(openTimeout);
+            const errorMsg = `DataChannel error: ${e.error?.message || e.message || 'unknown'}`;
+            log(`✗ ${errorMsg}`);
+            dcOpenReject(new Error(errorMsg));
+          }
+        };
+
+        dc.onclose = () => {
+          if (dcOpened) {
+            log("DataChannel closed");
+          }
+        };
+        dc.onmessage = (event) => {
+          const mode = packetModeEl.value;
+          if (typeof event.data === "string") {
+            if (mode === "text") {
+              try {
+                const obj = JSON.parse(event.data);
+                log(`recv text packet type=${obj.type} payload=${obj.payload}`);
+              } catch (_) {
+                log(`recv text raw: ${event.data}`);
+              }
+              return;
+            }
+            log(`recv string: ${event.data}`);
+            return;
+          }
+
+          const bytes = new Uint8Array(event.data);
+          const parsed = parseBinaryPacket(bytes);
+          log(`recv binary packet type=${parsed.type} payload=${parsed.payload}`);
+        };
+
+        // Handle remote tracks
+        pc.ontrack = (event) => {
+          log(`Received remote ${event.track.kind} track from ${event.streams[0]?.id}`);
+          
+          const stream = event.streams[0];
+          const videoId = `remote-video-${stream.id}`;
+          
+          // Check if video element already exists
+          let videoEl = document.getElementById(videoId);
+          if (!videoEl) {
+            videoEl = document.createElement("video");
+            videoEl.id = videoId;
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            videoEl.style.width = "320px";
+            videoEl.style.height = "240px";
+            videoEl.style.border = "1px solid #ccc";
+            videoEl.style.margin = "5px";
+            videoEl.style.background = "#000";
+            remoteVideosEl.appendChild(videoEl);
+            log(`Created video element for stream ${stream.id}`);
+          }
+          
+          videoEl.srcObject = stream;
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          log(`ICE state: ${pc.iceConnectionState}`);
+        };
+
+        pc.onconnectionstatechange = () => {
+          log(`Connection state: ${pc.connectionState}`);
+          if (pc.connectionState === 'failed') {
+            log('✗ Connection failed! Check network/firewall.');
+          }
+        };
+        
+        pc.onicegatheringstatechange = () => {
+          log(`ICE gathering: ${pc.iceGatheringState}`);
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        log("Waiting for ICE gathering to complete...");
+        await waitIceGatheringComplete(pc);
+        log("✓ ICE gathering complete");
+
+        const body = JSON.stringify({ offer: pc.localDescription });
+        log(`Sending offer to ${signalUrlEl.value.trim()}...`);
+        
+        const headers = { "Content-Type": "application/json" };
+        if (authTokenEl.value.trim() !== "") {
+          headers["Authorization"] = authTokenEl.value.trim();
+        }
+
+        let resp;
+        try {
+          resp = await fetch(signalUrlEl.value.trim(), {
+            method: "POST",
+            headers,
+            body,
+          });
+          log(`✓ Received response: status=${resp.status}`);
+        } catch (fetchErr) {
+          log(`✗ Fetch failed: ${fetchErr.message}`);
+          throw new Error(`Failed to connect to server: ${fetchErr.message}. Is the server running?`);
+        }
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(`signal failed: ${resp.status} ${text}`);
+        }
+
+        const ansBody = await resp.json();
+        const answer = ansBody.answer ? ansBody.answer : ansBody;
+        await pc.setRemoteDescription(answer);
+        
+        // Wait for data channel to open after setting remote description
+        log("Waiting for DataChannel to open...");
+        try {
+          // Wait with a reasonable timeout, but don't fail hard if it takes longer
+          await Promise.race([
+            dcOpenPromise,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout')), 30000)
+            )
+          ]);
+          log("✓ Connection established successfully!");
+          setConnectionState('connected');
+        } catch (err) {
+          // If timed out but DC eventually opens, that's okay
+          if (dc && dc.readyState === 'open') {
+            log("✓ DataChannel is now open (took longer than expected)");
+          } else {
+            log(`✗ DataChannel failed to open: ${err.message}`);
+            throw err;
+          }
+        }
+      } catch (err) {
+        log(`✗ Connect failed: ${err.message || err}`);
+        // 确保清理所有资源
+        await cleanupConnection();
+        setConnectionState('disconnected');
+      }
+    }
+
+    async function disconnect() {
+      log("Disconnecting...");
+      setConnectionState('disconnected');
+      await cleanupConnection();
+      log("✓ Disconnected successfully");
+    }
+
+    async function cleanupConnection() {
+      const dcToClose = dc;
+      const pcToClose = pc;
+      const streamToStop = localStream;
+      
+      // 先清空引用，防止重复操作
+      dc = null;
+      pc = null;
+      localStream = null;
+      
+      try {
+        // 关闭 DataChannel
+        if (dcToClose) {
+          log("Closing DataChannel...");
+          dcToClose.close();
+          // 等待 DataChannel 状态更新
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // 关闭 PeerConnection
+        if (pcToClose) {
+          log("Closing PeerConnection...");
+          log(`  Before close - connectionState: ${pcToClose.connectionState}`);
+          pcToClose.close();
+          // 等待状态更新
+          await new Promise(resolve => setTimeout(resolve, 300));
+          log(`  After close - connectionState: ${pcToClose.connectionState}`);
+        }
+        
+        // 停止媒体流
+        if (streamToStop) {
+          log("Stopping media tracks...");
+          streamToStop.getTracks().forEach(track => {
+            track.stop();
+            log(`  Stopped track: ${track.kind}`);
+          });
+        }
+        
+        // 清空视频元素
+        localVideoEl.srcObject = null;
+        remoteVideosEl.innerHTML = '';
+        
+        log("✓ Connection resources cleaned up");
+      } catch (e) {
+        log(`⚠ Cleanup warning: ${e.message}`);
+      }
+    }
+
+    function sendMessage() {
+      if (!dc || dc.readyState !== "open") {
+        log("data channel not open");
+        return;
+      }
+
+      const mode = packetModeEl.value;
+      const type = Number(messageTypeEl.value);
+      const payloadText = payloadEl.value;
+
+      try {
+        if (mode === "text") {
+          const packet = JSON.stringify({ type, payload: payloadText });
+          dc.send(packet);
+          log(`send text packet type=${type} payload=${payloadText}`);
+        } else {
+          const packet = buildBinaryPacket(type, payloadText);
+          dc.send(packet);
+          log(`send binary packet type=${type} payload=${payloadText}`);
+        }
+      } catch (err) {
+        log(`send failed: ${err.message || err}`);
+      }
+    }
+
+    function waitIceGatheringComplete(pcRef) {
+      if (pcRef.iceGatheringState === "complete") {
+        return Promise.resolve();
+      }
+      
+      return new Promise((resolve) => {
+        let resolved = false;
+        
+        function onStateChange() {
+          if (pcRef.iceGatheringState === "complete") {
+            pcRef.removeEventListener("icegatheringstatechange", onStateChange);
+            clearTimeout(timeout);
+            if (!resolved) {
+              resolved = true;
+              resolve();
+            }
+          }
+        }
+        
+        // Set a timeout to avoid waiting too long for STUN servers
+        const timeout = setTimeout(() => {
+          log(`⚠ ICE gathering timeout, proceeding with current candidates...`);
+          pcRef.removeEventListener("icegatheringstatechange", onStateChange);
+          if (!resolved) {
+            resolved = true;
+            resolve();
+          }
+        }, 5000); // 5 seconds max wait
+        
+        pcRef.addEventListener("icegatheringstatechange", onStateChange);
+      });
+    }
+  </script>
+</body>
+</html>
+

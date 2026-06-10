@@ -31,8 +31,8 @@
 
 ## 项目亮点
 
-- **统一接口**：六大领域（Config / Registry / Log / Metrics / Transport / Tracer）均由核心框架定义标准接口，插件只做实现
-- **多引擎支持**：6 种配置中心、8 种注册中心、6 种日志后端、3 种指标后端、3 种 HTTP 驱动、1 种 OTLP 追踪协议、12 种消息代理，覆盖主流技术栈
+- **统一接口**：八大领域（Config / Registry / Log / Metrics / Transport / Broker / Encoding / Tracer）均由核心框架定义标准接口，插件只做实现
+- **多引擎支持**：12 种配置中心、8 种注册中心、14 种日志后端、3 种指标后端、4 种 HTTP 驱动、20+ 种传输层协议、12 种消息代理、11 种编解码、3 种 AI SDK、1 种 OTLP 追踪协议，覆盖主流技术栈
 - **零侵入**：业务代码只依赖接口，不依赖具体引擎 SDK
 - **独立版本**：每个子模块独立 `go.mod`，按需引入，避免依赖膨胀
 - **Workspace 协同**：通过 `go.work` 管理多模块，开发体验如单仓项目
@@ -129,9 +129,17 @@
 | Apollo | `github.com/tx7do/go-wind-plugins/config/apollo` | 携程 Apollo |
 | Consul | `github.com/tx7do/go-wind-plugins/config/consul` | HashiCorp Consul KV |
 | Etcd | `github.com/tx7do/go-wind-plugins/config/etcd` | CoreOS etcd |
+| Env | `github.com/tx7do/go-wind-plugins/config/env` | 环境变量 |
+| File | `github.com/tx7do/go-wind-plugins/config/file` | 本地文件 |
+| FS | `github.com/tx7do/go-wind-plugins/config/fs` | fs.FS |
+| HTTP | `github.com/tx7do/go-wind-plugins/config/http` | HTTP 远程拉取 |
 | Kubernetes | `github.com/tx7do/go-wind-plugins/config/kubernetes` | K8s ConfigMap / Secret |
 | Nacos | `github.com/tx7do/go-wind-plugins/config/nacos` | 阿里云 Nacos |
+| OSS | `github.com/tx7do/go-wind-plugins/config/oss` | 对象存储 |
 | Polaris | `github.com/tx7do/go-wind-plugins/config/polaris` | 腾讯云 Polaris |
+| Redis | `github.com/tx7do/go-wind-plugins/config/redis` | Redis KV |
+| Vault | `github.com/tx7do/go-wind-plugins/config/vault` | HashiCorp Vault |
+| Zookeeper | `github.com/tx7do/go-wind-plugins/config/zookeeper` | Apache ZooKeeper |
 
 ### 服务注册发现（Registry）
 
@@ -151,9 +159,16 @@
 | 插件 | 模块路径 | 引擎 |
 |------|---------|------|
 | Aliyun SLS | `github.com/tx7do/go-wind-plugins/log/aliyun` | 阿里云日志服务 SLS |
-| Tencent CLS | `github.com/tx7do/go-wind-plugins/log/tencent` | 腾讯云日志服务 CLS |
+| Charm | `github.com/tx7do/go-wind-plugins/log/charm` | charmbracelet/log |
+| CloudWatch | `github.com/tx7do/go-wind-plugins/log/cloudwatch` | AWS CloudWatch Logs |
 | Fluent | `github.com/tx7do/go-wind-plugins/log/fluent` | Fluentd |
+| Glog | `github.com/tx7do/go-wind-plugins/log/glog` | golang/glog |
+| Hclog | `github.com/tx7do/go-wind-plugins/log/hclog` | hashicorp/go-hclog |
 | Logrus | `github.com/tx7do/go-wind-plugins/log/logrus` | sirupsen/logrus |
+| Loki | `github.com/tx7do/go-wind-plugins/log/loki` | Grafana Loki |
+| Phuslu | `github.com/tx7do/go-wind-plugins/log/phuslu` | phuslu/log |
+| Sentry | `github.com/tx7do/go-wind-plugins/log/sentry` | getsentry/sentry-go |
+| Tencent CLS | `github.com/tx7do/go-wind-plugins/log/tencent` | 腾讯云日志服务 CLS |
 | Zap | `github.com/tx7do/go-wind-plugins/log/zap` | uber-go/zap |
 | Zerolog | `github.com/tx7do/go-wind-plugins/log/zerolog` | rs/zerolog |
 
@@ -162,9 +177,27 @@
 | 插件 | 模块路径 | 引擎 |
 |------|---------|------|
 | HTTP (标准库) | `github.com/tx7do/go-wind-plugins/transport/http` | net/http |
+| HTTP (Chi) | `github.com/tx7do/go-wind-plugins/transport/http/chi` | go-chi/chi |
 | HTTP (Gin) | `github.com/tx7do/go-wind-plugins/transport/http/gin` | gin-gonic/gin |
 | HTTP (Fiber) | `github.com/tx7do/go-wind-plugins/transport/http/fiber` | gofiber/fiber |
+| HTTP/3 | `github.com/tx7do/go-wind-plugins/transport/http3` | quic-go/http3 |
 | gRPC | `github.com/tx7do/go-wind-plugins/transport/grpc` | google.golang.org/grpc |
+| WebSocket | `github.com/tx7do/go-wind-plugins/transport/websocket` | gorilla/websocket |
+| Socket.IO | `github.com/tx7do/go-wind-plugins/transport/socketio` | googollee/go-socket.io |
+| SignalR | `github.com/tx7do/go-wind-plugins/transport/signalr` | SignalR 协议 |
+| SSE | `github.com/tx7do/go-wind-plugins/transport/sse` | Server-Sent Events |
+| TCP | `github.com/tx7do/go-wind-plugins/transport/tcp` | net.Listener |
+| KCP | `github.com/tx7do/go-wind-plugins/transport/kcp` | xtaci/kcp-go |
+| WebRTC | `github.com/tx7do/go-wind-plugins/transport/webrtc` | pion/webrtc v4 |
+| WebTransport | `github.com/tx7do/go-wind-plugins/transport/webtransport` | webtransport-go |
+| GraphQL | `github.com/tx7do/go-wind-plugins/transport/graphql` | graphql-go |
+| Thrift | `github.com/tx7do/go-wind-plugins/transport/thrift` | Apache Thrift |
+| tRPC | `github.com/tx7do/go-wind-plugins/transport/trpc` | tRPC 协议 |
+| Cron | `github.com/tx7do/go-wind-plugins/transport/cron` | robfig/cron |
+| HPTimer | `github.com/tx7do/go-wind-plugins/transport/hptimer` | 高精度定时器 |
+| Asynq | `github.com/tx7do/go-wind-plugins/transport/asynq` | hibiken/asynq |
+| Machinery | `github.com/tx7do/go-wind-plugins/transport/machinery` | machinery (类 Celery) |
+| MCP | `github.com/tx7do/go-wind-plugins/transport/mcp` | Model Context Protocol |
 
 ### 分布式追踪（Tracer）
 
@@ -189,6 +222,15 @@
 | JSON | `github.com/tx7do/go-wind-plugins/encoding/json` | encoding/json |
 | Protobuf | `github.com/tx7do/go-wind-plugins/encoding/proto` | google.golang.org/protobuf |
 | YAML | `github.com/tx7do/go-wind-plugins/encoding/yaml` | gopkg.in/yaml.v3 |
+| TOML | `github.com/tx7do/go-wind-plugins/encoding/toml` | pelletier/go-toml |
+| XML | `github.com/tx7do/go-wind-plugins/encoding/xml` | encoding/xml |
+| MsgPack | `github.com/tx7do/go-wind-plugins/encoding/msgpack` | vmihailenco/msgpack |
+| Avro | `github.com/tx7do/go-wind-plugins/encoding/avro` | linkedin/goavro |
+| BSON | `github.com/tx7do/go-wind-plugins/encoding/bson` | go.mongodb.org/mongo-driver |
+| CBOR | `github.com/tx7do/go-wind-plugins/encoding/cbor` | fxamacker/cbor |
+| FlatBuffers | `github.com/tx7do/go-wind-plugins/encoding/flatbuffers` | google/flatbuffers |
+| Gob | `github.com/tx7do/go-wind-plugins/encoding/gob` | encoding/gob |
+| Thrift | `github.com/tx7do/go-wind-plugins/encoding/thrift` | Apache Thrift |
 
 ### 工作流引擎
 
@@ -209,6 +251,57 @@
 |------|---------|------|
 | MinIO | `github.com/tx7do/go-wind-plugins/oss/minio` | minio/minio-go |
 | S3 | `github.com/tx7do/go-wind-plugins/oss/s3` | aws/aws-sdk-go-v2 |
+
+### AI（大模型集成）
+
+> 每个 AI 子模块独立定义配置和客户端，支持不同的大语言模型服务。
+
+| 插件 | 模块路径 | 框架 |
+|------|---------|------|
+| OpenAI | `github.com/tx7do/go-wind-plugins/ai/openai` | sashabaranov/go-openai |
+| LangChainGo | `github.com/tx7do/go-wind-plugins/ai/langchaingo` | tmc/langchaingo |
+| Eino | `github.com/tx7do/go-wind-plugins/ai/eino` | cloudwego/eino |
+
+### 缓存（Cache）
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
+| Local | `github.com/tx7do/go-wind-plugins/cache/local` | 本地内存缓存 |
+| Redis | `github.com/tx7do/go-wind-plugins/cache/redis` | gomodule/redigo |
+
+### 熔断器（Circuit Breaker）
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
+| Hystrix | `github.com/tx7do/go-wind-plugins/circuitbreaker/hystrix` | afex/hystrix-go |
+| Sentinel | `github.com/tx7do/go-wind-plugins/circuitbreaker/sentinel` | alibaba/sentinel-golang |
+| SRE | `github.com/tx7do/go-wind-plugins/circuitbreaker/sres` | SRE 自适应熔断 |
+| Vegas | `github.com/tx7do/go-wind-plugins/circuitbreaker/vegas` | Vegas 自适应限流 |
+
+### 限流器（Rate Limiter）
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
+| Token Bucket | `github.com/tx7do/go-wind-plugins/ratelimit/tokenbucket` | 令牌桶算法 |
+| BBR | `github.com/tx7do/go-wind-plugins/ratelimit/bbr` | BBR 自适应限流 |
+| Sentinel | `github.com/tx7do/go-wind-plugins/ratelimit/sentinel` | alibaba/sentinel-golang |
+
+### 安全（Security）
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
+| JWT | `github.com/tx7do/go-wind-plugins/security/authn` | golang-jwt/jwt |
+| Casbin | `github.com/tx7do/go-wind-plugins/security/authz` | casbin/casbin |
+| Crypto | `github.com/tx7do/go-wind-plugins/security/crypto` | go-utils/crypto |
+
+### 其他工具模块
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| Errors | `github.com/tx7do/go-wind-plugins/errors` | 统一错误码与错误类型 |
+| Health | `github.com/tx7do/go-wind-plugins/health` | HTTP 健康检查 |
+| Pprof | `github.com/tx7do/go-wind-plugins/pprof` | 性能分析端点 |
+| Retry | `github.com/tx7do/go-wind-plugins/retry` | 重试策略（指数退避） |
 
 ### 消息代理（Broker）
 
@@ -242,9 +335,17 @@ graph TB
         CApollo[Apollo]
         CConsul[Consul]
         CEtcd[etcd]
+        CEnv[Env]
+        CFile[File]
+        CFS[FS]
+        CHTTP[HTTP]
         CK8s[Kubernetes]
         CNacos[Nacos]
+        COSS[OSS]
         CPolaris[Polaris]
+        CRedis[Redis]
+        CVault[Vault]
+        CZK[ZooKeeper]
     end
 
     subgraph Registry["服务注册发现"]
@@ -260,18 +361,43 @@ graph TB
 
     subgraph Log["日志系统"]
         LAliyun[Aliyun SLS]
-        LTencent[Tencent CLS]
+        LCharm[Charm]
+        LCloudWatch[CloudWatch]
         LFluent[Fluent]
+        LGlog[Glog]
+        LHclog[Hclog]
         LLogrus[Logrus]
+        LLoki[Loki]
+        LPhuslu[Phuslu]
+        LSentry[Sentry]
+        LTencent[Tencent CLS]
         LZap[Zap]
         LZerolog[Zerolog]
     end
 
     subgraph Transport["传输层"]
         THTTP[HTTP]
+        TChi[Chi]
         TGin[Gin]
         TFiber[Fiber]
+        THTTP3[HTTP/3]
         TGRPC[gRPC]
+        TWS[WebSocket]
+        TSIO[Socket.IO]
+        TSignalR[SignalR]
+        TSSE[SSE]
+        TTCP[TCP]
+        TKCP[KCP]
+        TWebRTC[WebRTC]
+        TWT[WebTransport]
+        TGraphQL[GraphQL]
+        TThrift[Thrift]
+        TTRPC[tRPC]
+        TCron[Cron]
+        THPTimer[HPTimer]
+        TAsynq[Asynq]
+        TMachinery[Machinery]
+        TMCP[MCP]
     end
 
     subgraph Tracer["分布式追踪"]
@@ -305,6 +431,47 @@ graph TB
         BRedis[Redis]
         BRocketMQ[RocketMQ]
         BNSQ[NSQ]
+        BSQS[SQS]
+        BGCP[GCP PubSub]
+        BAzure[Azure SB]
+        BActiveMQ[ActiveMQ]
+        BSTOMP[STOMP]
+    end
+
+    subgraph Encoding["编解码"]
+        EJSON[JSON]
+        EProto[Protobuf]
+        EYAML[YAML]
+        ETOML[TOML]
+        EXML[XML]
+        EMsgPack[MsgPack]
+        EAvro[Avro]
+        EBSON[BSON]
+        EFlat[FlatBuffers]
+    end
+
+    subgraph AI["AI 大模型"]
+        AOpenAI[OpenAI]
+        ALangChain[LangChainGo]
+        AEino[Eino]
+    end
+
+    subgraph Cache["缓存"]
+        CacheLocal[Local]
+        CacheRedis[Redis]
+    end
+
+    subgraph Security["安全"]
+        SAuthN[JWT]
+        SAuthZ[Casbin]
+        SCrypto[Crypto]
+    end
+
+    subgraph Resilience["弹性能力"]
+        RCBHystrix[Hystrix]
+        RCBSentinel[Sentinel]
+        RCBRatelimit[Token Bucket]
+        RCBBBR[BBR]
     end
 
     App --> Core
@@ -318,12 +485,10 @@ graph TB
     Core --> OSS
     Core --> Broker
     Core --> Encoding
-
-    subgraph Encoding["编解码"]
-        EJSON[JSON]
-        EProto[Protobuf]
-        EYAML[YAML]
-    end
+    Core --> AI
+    Core --> Cache
+    Core --> Security
+    Core --> Resilience
 ```
 
 ---
@@ -332,146 +497,155 @@ graph TB
 
 ```
 go-wind-plugins/
-├── config/                         # 配置中心接口与插件
-│   ├── config.go                   # 标准接口定义（Reader/Watcher/ValueWatcher...）
-│   ├── go.mod
-│   ├── apollo/                     # 携程 Apollo 配置中心
-│   ├── consul/                     # HashiCorp Consul KV
-│   ├── etcd/                       # CoreOS etcd 配置中心
-│   ├── kubernetes/                 # Kubernetes ConfigMap/Secret
-│   ├── nacos/                      # 阿里云 Nacos 配置中心
-│   └── polaris/                    # 腾讯云 Polaris 配置中心
+├── ai/                             # AI 大模型集成
+│   ├── openai/                     # OpenAI SDK
+│   ├── langchaingo/               # LangChainGo
+│   └── eino/                       # CloudWeGo Eino
 │
-├── registry/                       # 服务注册发现接口与插件
-│   ├── registrar.go                # Registrar 接口定义
-│   ├── discovery.go                # Discovery / Watcher 接口定义
-│   ├── go.mod
-│   ├── consul/                     # HashiCorp Consul
+├── broker/                         # 消息代理接口与插件
+│   ├── broker.go                   # Broker 接口定义
+│   ├── kafka/                      # Apache Kafka
+│   ├── rabbitmq/                   # RabbitMQ
+│   ├── nats/                       # NATS JetStream
+│   ├── mqtt/                       # MQTT
+│   ├── pulsar/                     # Apache Pulsar
+│   ├── redis/                      # Redis Pub/Sub
+│   ├── rocketmq/                   # Apache RocketMQ
+│   ├── nsq/                        # NSQ
+│   ├── sqs/                        # AWS SQS
+│   ├── gcpubsub/                   # Google Cloud Pub/Sub
+│   ├── azuresb/                    # Azure Service Bus
+│   └── stomp/                      # STOMP 协议
+│
+├── cache/                          # 缓存接口与插件
+│   ├── cache.go                    # Cache 接口定义
+│   ├── local/                      # 本地内存缓存
+│   └── redis/                      # Redis 缓存
+│
+├── circuitbreaker/                 # 熔断器接口与插件
+│   ├── circuitbreaker.go           # CircuitBreaker 接口定义
+│   ├── hystrix/                    # Hystrix
+│   ├── sentinel/                   # Sentinel
+│   ├── sres/                       # SRE 自适应熔断
+│   └── vegas/                      # Vegas 自适应限流
+│
+├── config/                         # 配置中心接口与插件
+│   ├── config.go                   # 标准接口定义
+│   ├── apollo/                     # 携程 Apollo
+│   ├── consul/                     # HashiCorp Consul KV
 │   ├── etcd/                       # CoreOS etcd
-│   ├── eureka/                     # Netflix Eureka
-│   ├── kubernetes/                 # Kubernetes Endpoints
+│   ├── env/                        # 环境变量
+│   ├── file/                       # 本地文件
+│   ├── fs/                         # fs.FS
+│   ├── http/                       # HTTP 远程拉取
+│   ├── kubernetes/                 # Kubernetes ConfigMap/Secret
 │   ├── nacos/                      # 阿里云 Nacos
+│   ├── oss/                        # 对象存储
 │   ├── polaris/                    # 腾讯云 Polaris
-│   ├── servicecomb/                # Apache ServiceComb
+│   ├── redis/                      # Redis KV
+│   ├── vault/                      # HashiCorp Vault
 │   └── zookeeper/                  # Apache ZooKeeper
 │
+├── encoding/                       # 编解码接口与插件
+│   ├── encoding.go                 # Codec 接口定义 + 注册表
+│   ├── json/                       # JSON
+│   ├── proto/                      # Protobuf
+│   ├── yaml/                       # YAML
+│   ├── toml/                       # TOML
+│   ├── xml/                        # XML
+│   ├── msgpack/                    # MessagePack
+│   ├── avro/                       # Avro
+│   ├── bson/                       # BSON
+│   ├── cbor/                       # CBOR
+│   ├── flatbuffers/                # FlatBuffers
+│   ├── gob/                        # Gob
+│   └── thrift/                     # Apache Thrift
+│
+├── errors/                         # 统一错误码与错误类型
+│
+├── health/                         # HTTP 健康检查
+│
 ├── log/                            # 日志接口与适配器
-│   ├── slog_logger.go              # 标准库 slog 适配器（默认实现）
-│   ├── level_filter.go             # 级别过滤器
-│   ├── multi_logger.go             # 多路日志器
-│   ├── go.mod
-│   ├── aliyun/                     # 阿里云 SLS 日志服务
+│   ├── slog_logger.go              # slog 适配器（默认）
+│   ├── aliyun/                     # 阿里云 SLS
+│   ├── charm/                      # Charm
+│   ├── cloudwatch/                 # AWS CloudWatch
 │   ├── fluent/                     # Fluentd
-│   ├── logrus/                     # sirupsen/logrus
-│   ├── tencent/                    # 腾讯云 CLS 日志服务
-│   ├── zap/                        # uber-go/zap
-│   └── zerolog/                    # rs/zerolog
-│
-├── transport/                      # 传输层接口与驱动
-│   ├── http/                       # HTTP Server + Driver 接口 + 默认驱动
-│   │   ├── server.go               # Server 实现（路由/中间件/TLS）
-│   │   ├── default_server.go       # 基于标准库的默认驱动
-│   │   ├── options.go              # 配置选项
-│   │   ├── gin/                    # Gin 驱动
-│   │   └── fiber/                  # Fiber 驱动
-│   └── grpc/                       # gRPC Server
-│
-├── tracer/                         # 分布式追踪插件
-│   ├── tracer.go                   # 包文档与说明
-│   ├── go.mod
-│   └── otlp/                       # OpenTelemetry Protocol (OTLP) 实现
-│       ├── otlp.go                 # 返回原生 *sdktrace.TracerProvider
-│       └── go.mod
+│   ├── glog/                       # glog
+│   ├── hclog/                      # hclog
+│   ├── logrus/                     # logrus
+│   ├── loki/                       # Grafana Loki
+│   ├── phuslu/                     # phuslu/log
+│   ├── sentry/                     # Sentry
+│   ├── tencent/                    # 腾讯云 CLS
+│   ├── zap/                        # zap
+│   └── zerolog/                    # zerolog
 │
 ├── metrics/                        # 指标监控接口与插件
-│   ├── metrics.go                  # Metrics 接口定义（Counter/Histogram/Gauge）
-│   ├── doc.go                      # 包文档
-│   ├── go.mod
-│   ├── prometheus/                 # Prometheus client_golang 实现
-│   │   ├── prometheus.go           # Prometheus provider 实现
-│   │   └── go.mod
-│   ├── otel/                       # OpenTelemetry OTLP 实现
-│   │   ├── otel.go                 # OTLP metric exporter 配置
-│   │   └── go.mod
-│   └── datadog/                    # Datadog DogStatsD 实现
-│       ├── datadog.go              # DogStatsD provider 实现
-│       └── go.mod
+│   ├── prometheus/                 # Prometheus
+│   ├── otel/                       # OpenTelemetry
+│   └── datadog/                    # Datadog
 │
-├── workflow/                      # 工作流引擎插件（定义 Client/Worker 公共接口）
-│   ├── workflow.go                # 公共接口（Client/Worker）
-│   ├── go.mod
-│   ├── argo/                      # Argo Workflows（REST API）
-│   │   ├── client.go              # 提交/查询/挂起/恢复/终止
-│   │   ├── options.go             # 配置选项 + Argo 类型定义
-│   │   ├── logger.go              # slog 日志封装
-│   │   └── go.mod
-│   ├── conductor/                 # Netflix Conductor（conductor-go SDK）
-│   │   ├── client.go              # 启动/查询/暂停/恢复/终止
-│   │   ├── worker.go              # Task Worker
-│   │   ├── options.go             # 配置选项
-│   │   ├── logger.go
-│   │   └── go.mod
-│   ├── goworkflows/               # cschleiden/go-workflows
-│   │   ├── client.go              # 创建/取消/信号/等待
-│   │   ├── worker.go              # Workflow + Activity Worker
-│   │   ├── options.go             # Worker 选项
-│   │   ├── logger.go
-│   │   └── go.mod
-│   └── temporal/                  # Temporal（temporal.io/sdk）
-│       ├── client.go              # 执行/信号/查询/取消（原生 OTel 链路追踪）
-│       ├── worker.go              # Worker + 内置消息处理 Activity
-│       ├── workflow.go            # 内置 BrokerMessageWorkflow
-│       ├── options.go             # 配置选项
-│       ├── logger.go
-│       └── go.mod
+├── oss/                            # 对象存储
+│   ├── minio/                      # MinIO
+│   └── s3/                         # AWS S3
 │
-├── encoding/                      # 编解码接口与插件
-│   ├── encoding.go                # Codec 接口定义 + 注册表
-│   ├── go.mod
-│   ├── json/                      # JSON 编解码器（encoding/json）
-│   │   ├── json.go
-│   │   └── go.mod
-│   ├── proto/                     # Protobuf 编解码器（google.golang.org/protobuf）
-│   │   ├── proto.go
-│   │   └── go.mod
-│   └── yaml/                      # YAML 编解码器（gopkg.in/yaml.v3）
-│       ├── yaml.go
-│       └── go.mod
+├── pprof/                          # 性能分析端点
 │
-├── oss/                           # 对象存储插件（独立自持配置）
-│   ├── minio/                     # MinIO（minio/minio-go）
-│   │   ├── client.go              # 返回 *minio.Client
-│   │   ├── config.go              # 本地 Config 类型
-│   │   └── go.mod
-│   └── s3/                        # AWS S3 兼容（aws-sdk-go-v2）
-│       ├── client.go              # 返回 *s3.Client
-│       ├── storage.go             # Storage 封装（默认 bucket）
-│       ├── config.go              # 本地 Config 类型
-│       ├── errors.go              # 哨兵错误
-│       └── go.mod
+├── ratelimit/                      # 限流器接口与插件
+│   ├── tokenbucket/                # 令牌桶
+│   ├── bbr/                        # BBR
+│   └── sentinel/                   # Sentinel
 │
-├── broker/                        # 消息代理接口与插件
-│   ├── broker.go                  # Broker 接口定义（Publish/Subscribe/Request）
-│   ├── message.go                 # Message 结构体（Headers/Body/Key）
-│   ├── event.go                   # Event 接口（Topic/Message/Ack）
-│   ├── options.go                 # Broker 配置选项
-│   ├── subscriber.go              # Subscriber 管理（SubscriberSyncMap）
-│   ├── encoding.go                # 消息编解码集成
-│   ├── publish.go                 # Publish 中间件链
-│   ├── typed_handler.go           # 泛型 TypedHandler 支持
-│   ├── go.mod
-│   ├── kafka/                     # Apache Kafka（segmentio/kafka-go）
-│   ├── rabbitmq/                  # RabbitMQ（rabbitmq/amqp091-go）
-│   ├── nats/                      # NATS JetStream（nats-io/nats.go）
-│   ├── mqtt/                      # MQTT（eclipse/paho.mqtt.golang）
-│   ├── pulsar/                    # Apache Pulsar（apache/pulsar-client-go）
-│   ├── redis/                     # Redis Pub/Sub（gomodule/redigo）
-│   ├── rocketmq/                  # Apache RocketMQ（双 SDK 支持）
-│   ├── nsq/                       # NSQ（nsqio/go-nsq）
-│   ├── sqs/                       # AWS SQS（aws/aws-sdk-go-v2）
-│   ├── gcpubsub/                  # Google Cloud Pub/Sub
-│   ├── azuresb/                   # Azure Service Bus
-│   └── stomp/                     # STOMP 协议
+├── registry/                       # 服务注册发现接口与插件
+│   ├── consul/                     # Consul
+│   ├── etcd/                       # etcd
+│   ├── eureka/                     # Eureka
+│   ├── kubernetes/                 # Kubernetes
+│   ├── nacos/                      # Nacos
+│   ├── polaris/                    # Polaris
+│   ├── servicecomb/                # ServiceComb
+│   └── zookeeper/                  # ZooKeeper
+│
+├── retry/                          # 重试策略
+│
+├── security/                       # 安全模块
+│   ├── authn/                      # 认证（JWT/OAuth2/OIDC）
+│   ├── authz/                      # 授权（Casbin）
+│   └── crypto/                     # 加解密
+│
+├── tracer/                         # 分布式追踪
+│   └── otlp/                       # OpenTelemetry OTLP
+│
+├── transport/                      # 传输层接口与驱动
+│   ├── http/                       # HTTP Server + Driver 接口
+│   │   ├── chi/                    # Chi 驱动
+│   │   ├── gin/                    # Gin 驱动
+│   │   └── fiber/                  # Fiber 驱动
+│   ├── http3/                      # HTTP/3 (QUIC)
+│   ├── grpc/                       # gRPC
+│   ├── websocket/                  # WebSocket
+│   ├── socketio/                   # Socket.IO
+│   ├── signalr/                    # SignalR
+│   ├── sse/                        # Server-Sent Events
+│   ├── tcp/                        # TCP Socket
+│   ├── kcp/                        # KCP (UDP)
+│   ├── webrtc/                     # WebRTC SFU
+│   ├── webtransport/               # WebTransport
+│   ├── graphql/                    # GraphQL
+│   ├── thrift/                     # Apache Thrift
+│   ├── trpc/                       # tRPC
+│   ├── cron/                       # Cron 定时任务
+│   ├── hptimer/                    # 高精度定时器
+│   ├── asynq/                      # Asynq 异步任务队列
+│   ├── machinery/                  # Machinery (类 Celery)
+│   └── mcp/                        # Model Context Protocol
+│
+├── workflow/                       # 工作流引擎
+│   ├── argo/                       # Argo Workflows
+│   ├── conductor/                  # Conductor
+│   ├── goworkflows/                # GoWorkflows
+│   └── temporal/                   # Temporal
 │
 ├── go.work                         # Go Workspace 多模块管理
 ├── LICENSE

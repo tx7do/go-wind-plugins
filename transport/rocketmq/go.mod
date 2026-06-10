@@ -21,6 +21,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0
 )
 
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000 // indirect
+
 require (
 	contrib.go.opencensus.io/exporter/ocagent v0.7.0 // indirect
 	github.com/aliyunmq/mq-http-go-sdk v1.0.3 // indirect
@@ -63,7 +65,7 @@ require (
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/tracer/otlp v1.1.2 // indirect
+	// indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.70.0 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect

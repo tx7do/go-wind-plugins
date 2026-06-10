@@ -19,6 +19,8 @@ require (
 	github.com/tx7do/go-wind-plugins/transport v0.0.1
 )
 
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000 // indirect
+
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -32,7 +34,7 @@ require (
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/tracer/otlp v1.1.2 // indirect
+	// indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect

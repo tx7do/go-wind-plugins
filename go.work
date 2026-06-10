@@ -163,6 +163,13 @@ use (
 	./transport/tcp
 	./transport/thrift
 	./transport/websocket
+	./transport/http3
+	./transport/machinery
+	./transport/mcp
+	./transport/trpc
+	./transport/webrtc
+	./transport/webtransport
+
 	./transport/http
 	./transport/http/driver/chi
 	./transport/http/driver/fiber
