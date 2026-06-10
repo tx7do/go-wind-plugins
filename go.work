@@ -70,9 +70,15 @@ use (
 	./metrics/prometheus
 	./retry
 	./security/authn
+	./security/authn/apikey
+	./security/authn/basicauth
+	./security/authn/hmac
+	./security/authn/mtls
 	./security/authn/jwt
+	./security/authn/oauth2
 	./security/authn/oidc
 	./security/authn/presharedkey
+	./security/authn/session
 	./security/authz
 	./security/authz/casbin
 	./security/authz/opa
