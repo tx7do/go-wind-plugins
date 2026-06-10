@@ -108,6 +108,9 @@ use (
 	./transport/grpc/client
 	./transport/grpc/middleware/authn
 	./transport/grpc/middleware/authz
+	./transport/grpc/middleware/logging
+	./transport/grpc/middleware/recovery
+	./transport/grpc/middleware/tracing
 	./transport/grpc/server
 	./transport/http
 	./transport/http/fiber
