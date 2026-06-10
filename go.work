@@ -68,6 +68,9 @@ use (
 	./metrics/datadog
 	./metrics/otel
 	./metrics/prometheus
+	./retry
+	./security/authn
+	./security/authz
 	./oss/minio
 	./oss/s3
 	./ratelimit
