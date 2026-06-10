@@ -2,8 +2,9 @@ package logging
 
 import (
 	"context"
-	"log/slog"
 	"time"
+
+	"github.com/tx7do/go-wind/log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -15,7 +16,7 @@ import (
 // latency.
 func UnaryClientInterceptor(opts ...Option) grpc.UnaryClientInterceptor {
 	cfg := &options{
-		logger: slog.Default(),
+		logger: log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -37,32 +38,32 @@ func UnaryClientInterceptor(opts ...Option) grpc.UnaryClientInterceptor {
 		err := invoker(ctx, method, req, reply, cc, callOpts...)
 		latency := time.Since(start)
 
-		level := slog.LevelInfo
+		level := log.LevelInfo
 		if err != nil {
 			st, _ := status.FromError(err)
 			if st.Code() >= codes.Internal {
-				level = slog.LevelError
+				level = log.LevelError
 			} else if st.Code() >= codes.NotFound {
-				level = slog.LevelWarn
+				level = log.LevelWarn
 			}
 		}
 
 		args := []any{
-			slog.String("method", method),
-			slog.String("target", cc.Target()),
-			slog.Int64("latency_ms", latency.Milliseconds()),
+			"method", method,
+			"target", cc.Target(),
+			"latency_ms", latency.Milliseconds(),
 		}
 		if err != nil {
 			st, _ := status.FromError(err)
 			args = append(args,
-				slog.String("code", st.Code().String()),
-				slog.String("error", err.Error()),
+				"code", st.Code().String(),
+				"error", err.Error(),
 			)
 		} else {
-			args = append(args, slog.String("code", codes.OK.String()))
+			args = append(args, "code", codes.OK.String())
 		}
 
-		cfg.logger.Log(ctx, level, "grpc unary client rpc", args...)
+		logAt(cfg.logger, level, ctx, "grpc unary client rpc", args...)
 		return err
 	}
 }
@@ -74,7 +75,7 @@ func UnaryClientInterceptor(opts ...Option) grpc.UnaryClientInterceptor {
 // errors are not captured.
 func StreamClientInterceptor(opts ...Option) grpc.StreamClientInterceptor {
 	cfg := &options{
-		logger: slog.Default(),
+		logger: log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -96,34 +97,34 @@ func StreamClientInterceptor(opts ...Option) grpc.StreamClientInterceptor {
 		stream, err := streamer(ctx, desc, cc, method, callOpts...)
 		latency := time.Since(start)
 
-		level := slog.LevelInfo
+		level := log.LevelInfo
 		if err != nil {
 			st, _ := status.FromError(err)
 			if st.Code() >= codes.Internal {
-				level = slog.LevelError
+				level = log.LevelError
 			} else if st.Code() >= codes.NotFound {
-				level = slog.LevelWarn
+				level = log.LevelWarn
 			}
 		}
 
 		args := []any{
-			slog.String("method", method),
-			slog.String("target", cc.Target()),
-			slog.Bool("client_stream", desc.ClientStreams),
-			slog.Bool("server_stream", desc.ServerStreams),
-			slog.Int64("latency_ms", latency.Milliseconds()),
+			"method", method,
+			"target", cc.Target(),
+			"client_stream", desc.ClientStreams,
+			"server_stream", desc.ServerStreams,
+			"latency_ms", latency.Milliseconds(),
 		}
 		if err != nil {
 			st, _ := status.FromError(err)
 			args = append(args,
-				slog.String("code", st.Code().String()),
-				slog.String("error", err.Error()),
+				"code", st.Code().String(),
+				"error", err.Error(),
 			)
 		} else {
-			args = append(args, slog.String("code", codes.OK.String()))
+			args = append(args, "code", codes.OK.String())
 		}
 
-		cfg.logger.Log(ctx, level, "grpc stream client rpc", args...)
+		logAt(cfg.logger, level, ctx, "grpc stream client rpc", args...)
 		return stream, err
 	}
 }

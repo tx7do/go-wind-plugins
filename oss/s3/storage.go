@@ -3,10 +3,11 @@ package s3
 import (
 	"context"
 	"io"
-	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/tx7do/go-wind/log"
 )
 
 type Storage struct {
@@ -16,7 +17,7 @@ type Storage struct {
 
 func NewStorage(cfg *Config) *Storage {
 	if cfg == nil {
-		slog.Error("missing s3 configuration")
+		log.GetLogger().Error(context.Background(), "missing s3 configuration")
 		return nil
 	}
 

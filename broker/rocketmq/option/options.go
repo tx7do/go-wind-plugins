@@ -3,9 +3,10 @@ package rocketmqOption
 import (
 	"time"
 
+	"github.com/tx7do/go-wind/log"
+
 	rmqClient "github.com/apache/rocketmq-clients/golang/v5"
 	"github.com/tx7do/go-wind-plugins/broker"
-	"log/slog"
 )
 
 ///
@@ -16,7 +17,7 @@ type Credentials struct {
 	AccessKey, AccessSecret, SecurityToken string
 }
 
-func WithLoggerLevel(level slog.Level) broker.Option {
+func WithLoggerLevel(level log.Level) broker.Option {
 	return broker.OptionContextWithValue(LoggerLevelKey{}, level)
 }
 

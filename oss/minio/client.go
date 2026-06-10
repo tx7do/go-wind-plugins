@@ -5,11 +5,12 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 	"reflect"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"github.com/tx7do/go-wind/log"
 )
 
 var (
@@ -25,7 +26,7 @@ type Storage struct {
 
 func NewClient(cfg *Config) *minio.Client {
 	if cfg == nil {
-		slog.Error("missing minio configuration")
+		log.GetLogger().Error(context.Background(), "missing minio configuration")
 		return nil
 	}
 
@@ -36,7 +37,7 @@ func NewClient(cfg *Config) *minio.Client {
 		},
 	)
 	if err != nil {
-		slog.Error("failed opening connection to minio", "error", err)
+		log.GetLogger().Error(context.Background(), "failed opening connection to minio", "error", err)
 		return nil
 	}
 

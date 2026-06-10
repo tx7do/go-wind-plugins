@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"reflect"
 	"strings"
 
@@ -13,11 +12,13 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/tx7do/go-wind/log"
 )
 
 func NewClient(cfg *Config) *awss3.Client {
 	if cfg == nil {
-		slog.Error("missing s3 configuration")
+		log.GetLogger().Error(context.Background(), "missing s3 configuration")
 		return nil
 	}
 
@@ -40,7 +41,7 @@ func NewClient(cfg *Config) *awss3.Client {
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(), loadOpts...)
 	if err != nil {
-		slog.Error("failed loading aws s3 config", "error", err)
+		log.GetLogger().Error(context.Background(), "failed loading aws s3 config", "error", err)
 		return nil
 	}
 

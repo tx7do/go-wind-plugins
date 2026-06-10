@@ -11,6 +11,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	pluginsLog "github.com/tx7do/go-wind-plugins/log"
+	"github.com/tx7do/go-wind/log"
 )
 
 // fakeServerStream provides a minimal grpc.ServerStream with a context.
@@ -21,8 +24,8 @@ type fakeServerStream struct {
 
 func (s *fakeServerStream) Context() context.Context { return s.ctx }
 
-func newTestLogger(buf *bytes.Buffer) *slog.Logger {
-	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+func newTestLogger(buf *bytes.Buffer) log.Logger {
+	return pluginsLog.SlogLogger{L: slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))}
 }
 
 func TestUnaryInterceptor_NoPanic(t *testing.T) {

@@ -1,8 +1,10 @@
 package conductor
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
+
+	"github.com/tx7do/go-wind/log"
 )
 
 const (
@@ -10,41 +12,41 @@ const (
 )
 
 func LogDebug(args ...any) {
-	slog.Debug(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
+	log.GetLogger().Debug(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
 }
 
 func LogInfo(args ...any) {
-	slog.Info(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
+	log.GetLogger().Info(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
 }
 
 func LogWarn(args ...any) {
-	slog.Warn(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
+	log.GetLogger().Warn(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
 }
 
 func LogError(args ...any) {
-	slog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
+	log.GetLogger().Error(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
 }
 
 func LogFatal(args ...any) {
-	slog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
+	log.GetLogger().Error(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
 }
 
 func LogDebugf(format string, args ...any) {
-	slog.Debug(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
+	log.GetLogger().Debug(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
 }
 
 func LogInfof(format string, args ...any) {
-	slog.Info(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
+	log.GetLogger().Info(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
 }
 
 func LogWarnf(format string, args ...any) {
-	slog.Warn(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
+	log.GetLogger().Warn(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
 }
 
 func LogErrorf(format string, args ...any) {
-	slog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
+	log.GetLogger().Error(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
 }
 
 func LogFatalf(format string, args ...any) {
-	slog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
+	log.GetLogger().Error(context.Background(), fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
 }

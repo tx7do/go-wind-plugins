@@ -16,7 +16,7 @@ import (
 	semConv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"log/slog"
+	"github.com/tx7do/go-wind/log"
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	rocketmqOption "github.com/tx7do/go-wind-plugins/broker/rocketmq/option"
@@ -66,7 +66,7 @@ func NewBroker(opts ...broker.Option) broker.Broker {
 		producers:   make(map[string]rocketmq.Producer),
 		subscribers: broker.NewSubscriberSyncMap(),
 		logger: &logger{
-			level: sslog.LevelInfo,
+			level: log.LevelInfo,
 		},
 	}
 }
@@ -127,7 +127,7 @@ func (b *rocketmqBroker) Init(opts ...broker.Option) error {
 		b.enableTrace = v
 	}
 
-	if v, ok := b.options.Context.Value(rocketmqOption.LoggerLevelKey{}).(slog.Level); ok {
+	if v, ok := b.options.Context.Value(rocketmqOption.LoggerLevelKey{}).(log.Level); ok {
 		b.logger.level = v
 	}
 

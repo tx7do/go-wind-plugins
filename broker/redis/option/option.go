@@ -2,7 +2,6 @@ package option
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/tx7do/go-wind-plugins/broker"
@@ -158,54 +157,6 @@ func WithDefaultOptions() broker.Option {
 
 		o.Context = context.WithValue(o.Context, OptionsKey, opts)
 	}
-}
-
-///
-/// logger
-///
-
-const (
-	logKey = "[redis]"
-)
-
-func LogDebug(args ...any) {
-	sslog.Debug(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-
-func LogInfo(args ...any) {
-	sslog.Info(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-
-func LogWarn(args ...any) {
-	sslog.Warn(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-
-func LogError(args ...any) {
-	sslog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-
-func LogFatal(args ...any) {
-	sslog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-
-func LogDebugf(format string, args ...any) {
-	sslog.Debug(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-
-func LogInfof(format string, args ...any) {
-	sslog.Info(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-
-func LogWarnf(format string, args ...any) {
-	sslog.Warn(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-
-func LogErrorf(format string, args ...any) {
-	sslog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-
-func LogFatalf(format string, args ...any) {
-	sslog.Error(fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
 }
 
 ///

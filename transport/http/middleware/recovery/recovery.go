@@ -15,9 +15,10 @@ package recovery
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"runtime/debug"
+
+	"github.com/tx7do/go-wind/log"
 
 	httpPlugin "github.com/tx7do/go-wind-plugins/transport/http"
 )
@@ -28,7 +29,7 @@ type Option func(*options)
 type options struct {
 	logStack     bool
 	errorHandler func(w http.ResponseWriter, r *http.Request, rvr any)
-	logger       *slog.Logger
+	logger       log.Logger
 }
 
 // WithStackTrace enables or disables stack trace logging.
@@ -43,9 +44,9 @@ func WithErrorHandler(h func(w http.ResponseWriter, r *http.Request, rvr any)) O
 	return func(o *options) { o.errorHandler = h }
 }
 
-// WithLogger sets a custom [slog.Logger] for panic logging.
-// Defaults to [slog.Default].
-func WithLogger(l *slog.Logger) Option {
+// WithLogger sets a custom [log.Logger] for panic logging.
+// Defaults to [log.GetLogger].
+func WithLogger(l log.Logger) Option {
 	return func(o *options) { o.logger = l }
 }
 
@@ -55,7 +56,7 @@ func Middleware(opts ...Option) httpPlugin.Middleware {
 	cfg := &options{
 		logStack:     true,
 		errorHandler: defaultErrorHandler,
-		logger:       slog.Default(),
+		logger:       log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -66,14 +67,14 @@ func Middleware(opts ...Option) httpPlugin.Middleware {
 			defer func() {
 				if rvr := recover(); rvr != nil {
 					args := []any{
-						slog.String("error", fmt.Sprint(rvr)),
-						slog.String("method", r.Method),
-						slog.String("path", r.URL.Path),
+						"error", fmt.Sprint(rvr),
+						"method", r.Method,
+						"path", r.URL.Path,
 					}
 					if cfg.logStack {
-						args = append(args, slog.String("stack", string(debug.Stack())))
+						args = append(args, "stack", string(debug.Stack()))
 					}
-					cfg.logger.ErrorContext(r.Context(), "panic recovered", args...)
+					cfg.logger.Error(r.Context(), "panic recovered", args...)
 					cfg.errorHandler(w, r, rvr)
 				}
 			}()

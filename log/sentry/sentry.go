@@ -106,14 +106,19 @@ func (s *sentryLog) event(level sentry.Level, msg string, keyvals []any) *sentry
 	evt.Level = level
 	evt.Message = msg
 
-	// 将 key-value 对放入 extra 字段
-	if evt.Extra == nil {
-		evt.Extra = make(map[string]any)
-	}
-
+	// 将 key-value 对放入 Contexts 字段
 	all := append(append([]any{}, s.extra...), keyvals...)
 	for i := 0; i+1 < len(all); i += 2 {
-		evt.Extra[fmt.Sprint(all[i])] = all[i+1]
+		if evt.Contexts == nil {
+			evt.Contexts = make(map[string]sentry.Context)
+		}
+		key := fmt.Sprint(all[i])
+		if ctx, ok := evt.Contexts[key]; ok {
+			ctx["value"] = all[i+1]
+			evt.Contexts[key] = ctx
+		} else {
+			evt.Contexts[key] = sentry.Context{"value": all[i+1]}
+		}
 	}
 
 	return evt

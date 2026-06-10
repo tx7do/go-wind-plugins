@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/tx7do/go-wind/log"
 
 	baseConfig "github.com/tx7do/go-wind-plugins/config"
 )
@@ -62,7 +63,7 @@ func New(opts ...Option) (*source, error) {
 			return nil, fmt.Errorf("watch directory %s: %w", dir, err)
 		}
 
-		slog.Debug("[file] watching", "dir", dir, "file", o.path)
+		log.GetLogger().Debug(context.Background(), "[file] watching", "dir", dir, "file", o.path)
 	}
 
 	return s, nil
@@ -136,7 +137,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 				}
 				data, err := os.ReadFile(path)
 				if err != nil {
-					slog.Debug("[file] read after event failed", "path", path, "error", err)
+					log.GetLogger().Debug(context.Background(), "[file] read after event failed", "path", path, "error", err)
 					continue
 				}
 				select {
@@ -148,7 +149,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 				if !ok {
 					return
 				}
-				slog.Error("[file] watcher error", "error", err)
+				log.GetLogger().Error(context.Background(), "[file] watcher error", "error", err)
 				return
 			}
 		}

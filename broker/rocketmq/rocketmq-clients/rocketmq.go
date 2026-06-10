@@ -16,7 +16,7 @@ import (
 	semConv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"log/slog"
+	"github.com/tx7do/go-wind/log"
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	rocketmqOption "github.com/tx7do/go-wind-plugins/broker/rocketmq/option"
@@ -155,16 +155,16 @@ func (b *rocketmqBroker) Init(opts ...broker.Option) error {
 		b.receiveInterval = v
 	}
 
-	if v, ok := b.options.Context.Value(rocketmqOption.LoggerLevelKey{}).(slog.Level); ok {
+	if v, ok := b.options.Context.Value(rocketmqOption.LoggerLevelKey{}).(log.Level); ok {
 		var strLevel string
 		switch v {
-		case sslog.LevelDebug:
+		case log.LevelDebug:
 			strLevel = "debug"
-		case sslog.LevelWarn:
+		case log.LevelWarn:
 			strLevel = "warn"
-		case sslog.LevelError:
+		case log.LevelError:
 			strLevel = "error"
-		case sslog.LevelInfo:
+		case log.LevelInfo:
 			strLevel = "info"
 		default:
 			panic("unhandled default case")

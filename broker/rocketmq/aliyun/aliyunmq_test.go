@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"log/slog"
+
+	"github.com/tx7do/go-wind/log"
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	rocketmqOption "github.com/tx7do/go-wind-plugins/broker/rocketmq/option"
@@ -26,7 +27,7 @@ const (
 )
 
 func handleHygrothermograph(_ context.Context, topic string, headers broker.Headers, msg *api.Hygrothermograph) error {
-	sslog.Info("Topic %s, Headers: %+v, Payload: %+v\n", topic, headers, msg)
+	log.GetLogger().Info(context.Background(), fmt.Sprintf("Topic %s, Headers: %+v, Payload: %+v", topic, headers, msg))
 	return nil
 }
 
@@ -45,27 +46,26 @@ func RegisterHygrothermographHandler(f func(ctx context.Context, topic string, h
 func createTracerProvider(exporterName, serviceName string) broker.Option {
 	switch exporterName {
 	case "otlp-grpc":
-		return broker.WithTracerProvider(
-			otlp.New(
-				exporterName,
-				"localhost:4317",
-				serviceName,
-				"",
-				"1.0.0",
-				1.0,
-			),
+		tp, err := otlp.New(
+			otlp.WithEndpoint("localhost:4317"),
+			otlp.WithServiceName(serviceName),
+			otlp.WithInsecure(true),
 		)
+		if err != nil {
+			return nil
+		}
+		return broker.WithTracerProvider(tp)
 	case "zipkin":
-		return broker.WithTracerProvider(
-			otlp.New(
-				exporterName,
-				"http://localhost:9411/api/v2/spans",
-				serviceName,
-				"test",
-				"1.0.0",
-				1.0,
-			),
+		tp, err := otlp.New(
+			otlp.WithEndpoint("http://localhost:9411/api/v2/spans"),
+			otlp.WithServiceName(serviceName),
+			otlp.WithHTTP(true),
+			otlp.WithHeaders(map[string]string{"test": ""}),
 		)
+		if err != nil {
+			return nil
+		}
+		return broker.WithTracerProvider(tp)
 	}
 
 	return nil

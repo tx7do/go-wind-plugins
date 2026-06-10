@@ -12,8 +12,9 @@ package logging
 
 import (
 	"context"
-	"log/slog"
 	"time"
+
+	"github.com/tx7do/go-wind/log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -24,13 +25,13 @@ import (
 type Option func(*options)
 
 type options struct {
-	logger      *slog.Logger
+	logger      log.Logger
 	skipMethods map[string]bool
 }
 
-// WithLogger sets a custom [slog.Logger] for RPC logging.
-// Defaults to [slog.Default].
-func WithLogger(l *slog.Logger) Option {
+// WithLogger sets a custom [log.Logger] for RPC logging.
+// Defaults to [log.GetLogger].
+func WithLogger(l log.Logger) Option {
 	return func(o *options) { o.logger = l }
 }
 
@@ -51,7 +52,7 @@ func WithSkipMethods(methods ...string) Option {
 // unary RPC after it completes, including method, status code, and latency.
 func UnaryInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 	cfg := &options{
-		logger: slog.Default(),
+		logger: log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -71,31 +72,31 @@ func UnaryInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 		resp, err := handler(ctx, req)
 		latency := time.Since(start)
 
-		level := slog.LevelInfo
+		level := log.LevelInfo
 		if err != nil {
 			st, _ := status.FromError(err)
 			if st.Code() >= codes.Internal {
-				level = slog.LevelError
+				level = log.LevelError
 			} else if st.Code() >= codes.NotFound {
-				level = slog.LevelWarn
+				level = log.LevelWarn
 			}
 		}
 
 		args := []any{
-			slog.String("method", info.FullMethod),
-			slog.Int64("latency_ms", latency.Milliseconds()),
+			"method", info.FullMethod,
+			"latency_ms", latency.Milliseconds(),
 		}
 		if err != nil {
 			st, _ := status.FromError(err)
 			args = append(args,
-				slog.String("code", st.Code().String()),
-				slog.String("error", err.Error()),
+				"code", st.Code().String(),
+				"error", err.Error(),
 			)
 		} else {
-			args = append(args, slog.String("code", codes.OK.String()))
+			args = append(args, "code", codes.OK.String())
 		}
 
-		cfg.logger.Log(ctx, level, "grpc unary rpc", args...)
+		logAt(cfg.logger, level, ctx, "grpc unary rpc", args...)
 		return resp, err
 	}
 }
@@ -104,7 +105,7 @@ func UnaryInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 // streaming RPC after it completes.
 func StreamInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 	cfg := &options{
-		logger: slog.Default(),
+		logger: log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -124,33 +125,47 @@ func StreamInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 		err := handler(srv, ss)
 		latency := time.Since(start)
 
-		level := slog.LevelInfo
+		level := log.LevelInfo
 		if err != nil {
 			st, _ := status.FromError(err)
 			if st.Code() >= codes.Internal {
-				level = slog.LevelError
+				level = log.LevelError
 			} else if st.Code() >= codes.NotFound {
-				level = slog.LevelWarn
+				level = log.LevelWarn
 			}
 		}
 
 		args := []any{
-			slog.String("method", info.FullMethod),
-			slog.Bool("client_stream", info.IsClientStream),
-			slog.Bool("server_stream", info.IsServerStream),
-			slog.Int64("latency_ms", latency.Milliseconds()),
+			"method", info.FullMethod,
+			"client_stream", info.IsClientStream,
+			"server_stream", info.IsServerStream,
+			"latency_ms", latency.Milliseconds(),
 		}
 		if err != nil {
 			st, _ := status.FromError(err)
 			args = append(args,
-				slog.String("code", st.Code().String()),
-				slog.String("error", err.Error()),
+				"code", st.Code().String(),
+				"error", err.Error(),
 			)
 		} else {
-			args = append(args, slog.String("code", codes.OK.String()))
+			args = append(args, "code", codes.OK.String())
 		}
 
-		cfg.logger.Log(ss.Context(), level, "grpc stream rpc", args...)
+		logAt(cfg.logger, level, ss.Context(), "grpc stream rpc", args...)
 		return err
+	}
+}
+
+// logAt dispatches to the appropriate log level method.
+func logAt(l log.Logger, level log.Level, ctx context.Context, msg string, args ...any) {
+	switch level {
+	case log.LevelDebug:
+		l.Debug(ctx, msg, args...)
+	case log.LevelWarn:
+		l.Warn(ctx, msg, args...)
+	case log.LevelError:
+		l.Error(ctx, msg, args...)
+	default:
+		l.Info(ctx, msg, args...)
 	}
 }

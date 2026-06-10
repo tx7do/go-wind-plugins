@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/tx7do/go-wind/log"
 
 	baseConfig "github.com/tx7do/go-wind-plugins/config"
 )
@@ -138,7 +139,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 		// Initial fetch.
 		data, etag, err := s.fetchWithETag(ctx, url, "")
 		if err != nil {
-			slog.Error("[http] initial fetch failed", "url", url, "error", err)
+			log.GetLogger().Error(context.Background(), "[http] initial fetch failed", "url", url, "error", err)
 		} else if data != nil {
 			lastETag = etag
 			select {
@@ -158,7 +159,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 			case <-ticker.C:
 				data, etag, err := s.fetchWithETag(ctx, url, lastETag)
 				if err != nil {
-					slog.Debug("[http] poll fetch failed", "url", url, "error", err)
+					log.GetLogger().Debug(context.Background(), "[http] poll fetch failed", "url", url, "error", err)
 					continue
 				}
 				if etag != "" {

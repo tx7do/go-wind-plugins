@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"log/slog"
-
 	"github.com/stretchr/testify/assert"
+
+	"github.com/tx7do/go-wind/log"
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	api "github.com/tx7do/go-wind-plugins/testing/api/manual"
@@ -196,12 +196,12 @@ func RegisterHygrothermographRawHandler(fnc HygrothermographHandler) broker.Hand
 		switch t := event.Message().Body.(type) {
 		case []byte:
 			if err := json.Unmarshal(t, &msg); err != nil {
-				slog.Error("json Unmarshal failed: ", err.Error())
+				log.GetLogger().Error(context.Background(), "json Unmarshal failed: ", "error", err.Error())
 				return err
 			}
 		case string:
 			if err := json.Unmarshal([]byte(t), &msg); err != nil {
-				slog.Error("json Unmarshal failed: ", err.Error())
+				log.GetLogger().Error(context.Background(), "json Unmarshal failed: ", "error", err.Error())
 				return err
 			}
 
@@ -209,7 +209,7 @@ func RegisterHygrothermographRawHandler(fnc HygrothermographHandler) broker.Hand
 			msg = *t
 
 		default:
-			slog.Error("unknown type Unmarshal failed: ", t)
+			log.GetLogger().Error(context.Background(), "unknown type Unmarshal failed: ", "type", fmt.Sprintf("%T", t))
 			return fmt.Errorf("unsupported type: %T", t)
 		}
 

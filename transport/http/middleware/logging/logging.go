@@ -12,9 +12,11 @@
 package logging
 
 import (
-	"log/slog"
+	"context"
 	"net/http"
 	"time"
+
+	"github.com/tx7do/go-wind/log"
 
 	httpPlugin "github.com/tx7do/go-wind-plugins/transport/http"
 )
@@ -23,13 +25,13 @@ import (
 type Option func(*options)
 
 type options struct {
-	logger    *slog.Logger
+	logger    log.Logger
 	skipPaths map[string]struct{}
 }
 
-// WithLogger sets a custom [slog.Logger] for request logging.
-// Defaults to [slog.Default].
-func WithLogger(l *slog.Logger) Option {
+// WithLogger sets a custom [log.Logger] for request logging.
+// Defaults to [log.GetLogger].
+func WithLogger(l log.Logger) Option {
 	return func(o *options) { o.logger = l }
 }
 
@@ -51,7 +53,7 @@ func WithSkipPaths(paths ...string) Option {
 // and remote address.
 func Middleware(opts ...Option) httpPlugin.Middleware {
 	cfg := &options{
-		logger: slog.Default(),
+		logger: log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -70,23 +72,37 @@ func Middleware(opts ...Option) httpPlugin.Middleware {
 			next.ServeHTTP(rw, r)
 			latency := time.Since(start)
 
-			level := slog.LevelInfo
+			level := log.LevelInfo
 			if rw.status >= 500 {
-				level = slog.LevelError
+				level = log.LevelError
 			} else if rw.status >= 400 {
-				level = slog.LevelWarn
+				level = log.LevelWarn
 			}
 
-			cfg.logger.Log(r.Context(), level, "http request",
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.String("query", r.URL.RawQuery),
-				slog.Int("status", rw.status),
-				slog.Int("size", rw.size),
-				slog.Int64("latency_ms", latency.Milliseconds()),
-				slog.String("remote", r.RemoteAddr),
+			logAt(cfg.logger, level, r.Context(), "http request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"query", r.URL.RawQuery,
+				"status", rw.status,
+				"size", rw.size,
+				"latency_ms", latency.Milliseconds(),
+				"remote", r.RemoteAddr,
 			)
 		})
+	}
+}
+
+// logAt dispatches to the appropriate log level method.
+func logAt(l log.Logger, level log.Level, ctx context.Context, msg string, args ...any) {
+	switch level {
+	case log.LevelDebug:
+		l.Debug(ctx, msg, args...)
+	case log.LevelWarn:
+		l.Warn(ctx, msg, args...)
+	case log.LevelError:
+		l.Error(ctx, msg, args...)
+	default:
+		l.Info(ctx, msg, args...)
 	}
 }
 

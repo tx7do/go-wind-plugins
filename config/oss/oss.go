@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/tx7do/go-wind/log"
 
 	baseConfig "github.com/tx7do/go-wind-plugins/config"
 )
@@ -112,7 +113,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 		// Initial load — push current value and record ETag.
 		head, err := s.headObject(ctx, objKey)
 		if err != nil {
-			slog.Error("[oss] initial head failed", "key", objKey, "error", err)
+			log.GetLogger().Error(context.Background(), "[oss] initial head failed", "key", objKey, "error", err)
 		} else {
 			lastETag = head
 			if data, err := s.Load(ctx, objKey); err == nil {
@@ -122,7 +123,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 					return
 				}
 			} else {
-				slog.Error("[oss] initial load failed", "key", objKey, "error", err)
+				log.GetLogger().Error(context.Background(), "[oss] initial load failed", "key", objKey, "error", err)
 			}
 		}
 
@@ -133,7 +134,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 			case <-ticker.C:
 				etag, err := s.headObject(ctx, objKey)
 				if err != nil {
-					slog.Debug("[oss] head failed during poll", "key", objKey, "error", err)
+					log.GetLogger().Debug(context.Background(), "[oss] head failed during poll", "key", objKey, "error", err)
 					continue
 				}
 				if etag == lastETag {
@@ -142,7 +143,7 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 				lastETag = etag
 				data, err := s.Load(ctx, objKey)
 				if err != nil {
-					slog.Error("[oss] load after ETag change failed", "key", objKey, "error", err)
+					log.GetLogger().Error(context.Background(), "[oss] load after ETag change failed", "key", objKey, "error", err)
 					continue
 				}
 				select {

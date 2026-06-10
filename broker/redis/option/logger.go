@@ -1,4 +1,4 @@
-package temporal
+package option
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	logKey = "[Temporal]"
+	logKey = "[redis]"
 )
 
 func LogDebug(args ...any) {

@@ -15,8 +15,9 @@ package recovery
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"runtime/debug"
+
+	"github.com/tx7do/go-wind/log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -28,7 +29,7 @@ type Option func(*options)
 
 type options struct {
 	logStack bool
-	logger   *slog.Logger
+	logger   log.Logger
 }
 
 // WithStackTrace enables or disables stack trace logging.
@@ -37,9 +38,9 @@ func WithStackTrace(enabled bool) Option {
 	return func(o *options) { o.logStack = enabled }
 }
 
-// WithLogger sets a custom [slog.Logger] for panic logging.
-// Defaults to [slog.Default].
-func WithLogger(l *slog.Logger) Option {
+// WithLogger sets a custom [log.Logger] for panic logging.
+// Defaults to [log.GetLogger].
+func WithLogger(l log.Logger) Option {
 	return func(o *options) { o.logger = l }
 }
 
@@ -48,7 +49,7 @@ func WithLogger(l *slog.Logger) Option {
 func UnaryInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 	cfg := &options{
 		logStack: true,
-		logger:   slog.Default(),
+		logger:   log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -63,13 +64,13 @@ func UnaryInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 		defer func() {
 			if rvr := recover(); rvr != nil {
 				args := []any{
-					slog.String("error", fmt.Sprint(rvr)),
-					slog.String("method", info.FullMethod),
+					"error", fmt.Sprint(rvr),
+					"method", info.FullMethod,
 				}
 				if cfg.logStack {
-					args = append(args, slog.String("stack", string(debug.Stack())))
+					args = append(args, "stack", string(debug.Stack()))
 				}
-				cfg.logger.ErrorContext(ctx, "panic recovered", args...)
+				cfg.logger.Error(ctx, "panic recovered", args...)
 				err = status.Errorf(codes.Internal, "internal server error")
 			}
 		}()
@@ -82,7 +83,7 @@ func UnaryInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 func StreamInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 	cfg := &options{
 		logStack: true,
-		logger:   slog.Default(),
+		logger:   log.GetLogger(),
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -97,13 +98,13 @@ func StreamInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 		defer func() {
 			if rvr := recover(); rvr != nil {
 				args := []any{
-					slog.String("error", fmt.Sprint(rvr)),
-					slog.String("method", info.FullMethod),
+					"error", fmt.Sprint(rvr),
+					"method", info.FullMethod,
 				}
 				if cfg.logStack {
-					args = append(args, slog.String("stack", string(debug.Stack())))
+					args = append(args, "stack", string(debug.Stack()))
 				}
-				cfg.logger.ErrorContext(ss.Context(), "panic recovered", args...)
+				cfg.logger.Error(ss.Context(), "panic recovered", args...)
 				err = status.Errorf(codes.Internal, "internal server error")
 			}
 		}()
