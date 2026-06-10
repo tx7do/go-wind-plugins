@@ -90,6 +90,7 @@ use (
 	./security/authz/zanzibar
 	./oss/minio
 	./oss/s3
+	./pprof
 	./ratelimit
 	./ratelimit/bbr
 	./ratelimit/sentinel
