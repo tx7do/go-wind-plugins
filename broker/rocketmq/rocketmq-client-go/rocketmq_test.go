@@ -63,31 +63,16 @@ func RegisterHygrothermographRawHandler(fnc HygrothermographHandler) broker.Hand
 	}
 }
 
-func createTracerProvider(exporterName, serviceName string) broker.Option {
-	switch exporterName {
-	case "otlp-grpc":
-		return broker.WithTracerProvider(
-			otlp.New(exporterName,
-				"localhost:4317",
-				serviceName,
-				"",
-				"1.0.0",
-				1.0,
-			),
-		)
-	case "zipkin":
-		return broker.WithTracerProvider(
-			otlp.New(exporterName,
-				"http://localhost:9411/api/v2/spans",
-				serviceName,
-				"test",
-				"1.0.0",
-				1.0,
-			),
-		)
+func createTracerProvider(serviceName string) broker.Option {
+	tp, err := otlp.New(
+		otlp.WithEndpoint("localhost:4317"),
+		otlp.WithServiceName(serviceName),
+		otlp.WithInsecure(true),
+	)
+	if err != nil {
+		return nil
 	}
-
-	return nil
+	return broker.WithTracerProvider(tp)
 }
 
 func TestSubscribe(t *testing.T) {
@@ -166,7 +151,7 @@ func TestSubscribe_WithTracer(t *testing.T) {
 	b := NewBroker(
 		broker.WithCodec("json"),
 		rocketmqOption.WithEnableTrace(),
-		createTracerProvider("otlp-grpc", "subscribe_tracer_tester"),
+		createTracerProvider("subscribe_tracer_tester"),
 		rocketmqOption.WithNameServer([]string{testBroker}),
 		//rocketmqOption.WithNameServerDomain(testBroker),
 		rocketmqOption.WithGroupName(testGroupName),
@@ -199,7 +184,7 @@ func TestPublish_WithTracer(t *testing.T) {
 
 	b := NewBroker(
 		broker.WithCodec("json"),
-		createTracerProvider("otlp-grpc", "publish_tracer_tester"),
+		createTracerProvider("publish_tracer_tester"),
 		rocketmqOption.WithEnableTrace(),
 		rocketmqOption.WithNameServer([]string{testBroker}),
 		//rocketmqOption.WithNameServerDomain(testBroker),

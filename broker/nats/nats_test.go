@@ -272,31 +272,16 @@ func Test_Subscribe_WithJsonCodec(t *testing.T) {
 	<-interrupt
 }
 
-func createTracerProvider(exporterName, serviceName string) broker.Option {
-	switch exporterName {
-	case "otlp-grpc":
-		return broker.WithTracerProvider(
-			otlp.New(exporterName,
-				"localhost:4317",
-				serviceName,
-				"",
-				"1.0.0",
-				1.0,
-			),
-		)
-	case "zipkin":
-		return broker.WithTracerProvider(
-			otlp.New(exporterName,
-				"http://localhost:9411/api/v2/spans",
-				serviceName,
-				"test",
-				"1.0.0",
-				1.0,
-			),
-		)
+func createTracerProvider(serviceName string) broker.Option {
+	tp, err := otlp.New(
+		otlp.WithEndpoint("localhost:4317"),
+		otlp.WithServiceName(serviceName),
+		otlp.WithInsecure(true),
+	)
+	if err != nil {
+		return nil
 	}
-
-	return nil
+	return broker.WithTracerProvider(tp)
 }
 
 func Test_Publish_WithTracer(t *testing.T) {
@@ -306,7 +291,7 @@ func Test_Publish_WithTracer(t *testing.T) {
 	b := NewBroker(
 		broker.WithAddress(localBroker),
 		broker.WithCodec("json"),
-		createTracerProvider("otlp-grpc", "publish_tracer_tester"),
+		createTracerProvider("publish_tracer_tester"),
 	)
 
 	_ = b.Init()
@@ -344,7 +329,7 @@ func Test_Subscribe_WithTracer(t *testing.T) {
 	b := NewBroker(
 		broker.WithAddress(localBroker),
 		broker.WithCodec("json"),
-		createTracerProvider("otlp-grpc", "subscribe_tracer_tester"),
+		createTracerProvider("subscribe_tracer_tester"),
 	)
 	defer b.Disconnect()
 
@@ -366,7 +351,7 @@ func Test_Request_WithTracer(t *testing.T) {
 	b := NewBroker(
 		broker.WithAddress(localBroker),
 		broker.WithCodec("json"),
-		createTracerProvider("otlp-grpc", "request_tracer_tester"),
+		createTracerProvider("request_tracer_tester"),
 	)
 	_ = b.Init()
 
@@ -412,7 +397,7 @@ func Test_ResponseSubscribe_WithTracer(t *testing.T) {
 	b := NewBroker(
 		broker.WithAddress(localBroker),
 		broker.WithCodec("json"),
-		createTracerProvider("otlp-grpc", "responseSubscribe_tracer_tester"),
+		createTracerProvider("responseSubscribe_tracer_tester"),
 	)
 
 	defer b.Disconnect()

@@ -113,8 +113,7 @@ func TestMiddleware_WithLogger(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	// Even with a nil logger, recovery should still work.
-	// Note: this may panic if slog.Default() is not called.
-	// The middleware uses slog.Default() when logger is nil.
+	// The middleware uses log.GetLogger() when logger is nil.
 	defer func() {
 		_ = recover()
 	}()

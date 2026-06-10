@@ -339,7 +339,7 @@ func TestJetStream_Publish_WithTracer(t *testing.T) {
 	b := NewJetStreamBroker(
 		broker.WithAddress(localBroker),
 		broker.WithCodec("json"),
-		createTracerProvider("otlp-grpc", "js_publish_tracer_tester"),
+		createTracerProvider("js_publish_tracer_tester"),
 	)
 
 	_ = b.Init()
@@ -383,7 +383,7 @@ func TestJetStream_Subscribe_WithTracer(t *testing.T) {
 	b := NewJetStreamBroker(
 		broker.WithAddress(localBroker),
 		broker.WithCodec("json"),
-		createTracerProvider("otlp-grpc", "js_subscribe_tracer_tester"),
+		createTracerProvider("js_subscribe_tracer_tester"),
 	)
 
 	_ = b.Init()
