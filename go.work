@@ -108,8 +108,11 @@ use (
 	./transport/grpc/client
 	./transport/grpc/middleware/authn
 	./transport/grpc/middleware/authz
+	./transport/grpc/middleware/circuitbreaker
 	./transport/grpc/middleware/logging
+	./transport/grpc/middleware/ratelimit
 	./transport/grpc/middleware/recovery
+	./transport/grpc/middleware/retry
 	./transport/grpc/middleware/tracing
 	./transport/grpc/server
 	./transport/http
@@ -117,8 +120,11 @@ use (
 	./transport/http/gin
 	./transport/http/middleware/authn
 	./transport/http/middleware/authz
+	./transport/http/middleware/circuitbreaker
 	./transport/http/middleware/logging
+	./transport/http/middleware/ratelimit
 	./transport/http/middleware/recovery
+	./transport/http/middleware/retry
 	./transport/http/middleware/tracing
 	./transport/http/middleware/validate
 	./workflow
