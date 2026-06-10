@@ -1,4 +1,4 @@
-﻿package rocketmq
+package rocketmq
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tx7do/go-wind/log"
 	"github.com/stretchr/testify/assert"
 	api "github.com/tx7do/go-wind-plugins/testing/api/manual"
+	"github.com/tx7do/go-wind/log"
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	"github.com/tx7do/go-wind-plugins/broker/rocketmq"
@@ -28,7 +28,7 @@ const (
 )
 
 func handleHygrothermograph(_ context.Context, topic string, headers broker.Headers, msg *api.Hygrothermograph) error {
-	log.GetLogger().Info(nil, fmt.Sprintf("Topic %s, Headers: %+v, Payload: %+v\n", topic, headers, msg)
+	log.GetLogger().Info(nil, fmt.Sprintf("Topic %s, Headers: %+v, Payload: %+v\n", topic, headers, msg))
 	return nil
 }
 
