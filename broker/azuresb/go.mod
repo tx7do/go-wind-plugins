@@ -12,6 +12,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.10.0
 	github.com/stretchr/testify v1.11.1
+	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v1.3.3
 )
 

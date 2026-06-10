@@ -11,6 +11,7 @@ replace (
 require (
 	cloud.google.com/go/pubsub/v2 v2.6.0
 	github.com/stretchr/testify v1.11.1
+	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v1.3.3
 	google.golang.org/api v0.277.0
 )

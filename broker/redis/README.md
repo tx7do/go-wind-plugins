@@ -29,8 +29,8 @@ package main
 
 import (
 	"context"
-	"github.com/tx7do/kratos-transport/broker"
-	"github.com/tx7do/kratos-transport/broker/redis"
+	"github.com/tx7do/go-wind-plugins/broker"
+	"github.com/tx7do/go-wind-plugins/broker/redis"
 )
 
 func main() {
@@ -59,8 +59,8 @@ package main
 import (
 	"context"
 	"time"
-	"github.com/tx7do/kratos-transport/broker"
-	"github.com/tx7do/kratos-transport/broker/redis"
+	"github.com/tx7do/go-wind-plugins/broker"
+	"github.com/tx7do/go-wind-plugins/broker/redis"
 )
 
 func main() {
@@ -107,8 +107,8 @@ func main() {
 
 | 选项 | 说明 | 默认值 | 类型 |
 |------|------|--------|------|
-| `redis.WithStreamGroup(name)` | 消费组名称 | `kratos-group` | SubscribeOption |
-| `redis.WithStreamConsumer(name)` | 消费者名称 | `kratos-consumer` | SubscribeOption |
+| `redis.WithStreamGroup(name)` | 消费组名称 | `default-group` | SubscribeOption |
+| `redis.WithStreamConsumer(name)` | 消费者名称 | `default-consumer` | SubscribeOption |
 | `redis.WithStreamBlockTime(d)` | XREADGROUP 阻塞等待时间 | 5s | SubscribeOption |
 | `redis.WithStreamCount(n)` | 每次读取的最大消息数 | 10 | SubscribeOption |
 | `redis.WithStreamMaxLen(n)` | XADD 时 MAXLEN 限制 | 0 (不限制) | PublishOption |

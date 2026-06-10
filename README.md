@@ -32,7 +32,7 @@
 ## 项目亮点
 
 - **统一接口**：六大领域（Config / Registry / Log / Metrics / Transport / Tracer）均由核心框架定义标准接口，插件只做实现
-- **多引擎支持**：6 种配置中心、8 种注册中心、6 种日志后端、3 种指标后端、3 种 HTTP 驱动、1 种 OTLP 追踪协议，覆盖主流技术栈
+- **多引擎支持**：6 种配置中心、8 种注册中心、6 种日志后端、3 种指标后端、3 种 HTTP 驱动、1 种 OTLP 追踪协议、12 种消息代理，覆盖主流技术栈
 - **零侵入**：业务代码只依赖接口，不依赖具体引擎 SDK
 - **独立版本**：每个子模块独立 `go.mod`，按需引入，避免依赖膨胀
 - **Workspace 协同**：通过 `go.work` 管理多模块，开发体验如单仓项目
@@ -84,6 +84,21 @@
 | `*sdktrace.TracerProvider` | `Tracer(name) trace.Tracer` | 创建标准 OTel Tracer |
 | `*sdktrace.TracerProvider` | `Shutdown(ctx)` | 关闭 provider，刷新未导出 span |
 | `trace.Tracer` | `Start(ctx, name, opts...)` | 创建 Span，注入 trace 上下文 |
+
+### 消息代理（Broker）
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `Broker` | `Name() string` | 获取 Broker 名称 |
+| `Broker` | `Address() string` | 获取 Broker 地址 |
+| `Broker` | `Init(...Option) error` | 初始化 Broker |
+| `Broker` | `Connect() / Disconnect() error` | 连接 / 断开 Broker |
+| `Broker` | `Publish(ctx, topic, *Message, ...PublishOption) error` | 发布消息到主题 |
+| `Broker` | `Subscribe(topic, Handler, Binder, ...SubscribeOption) (Subscriber, error)` | 订阅主题 |
+| `Broker` | `Request(ctx, topic, *Message, ...RequestOption) (*Message, error)` | 请求-响应模式 |
+| `Message` | `Headers / Body / Key` | 消息头、消息体、分区键 |
+| `Event` | `Topic() / Message() / Ack() / Error()` | 订阅者收到的事件 |
+| `Subscriber` | `Unsubscribe() error` | 取消订阅 |
 
 ### 指标监控（Metrics）
 
@@ -195,6 +210,25 @@
 | MinIO | `github.com/tx7do/go-wind-plugins/oss/minio` | minio/minio-go |
 | S3 | `github.com/tx7do/go-wind-plugins/oss/s3` | aws/aws-sdk-go-v2 |
 
+### 消息代理（Broker）
+
+> 各 Broker 引擎 SDK 差异较大，每个子模块独立定义配置选项，但均实现核心 `broker.Broker` 接口。
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
+| Kafka | `github.com/tx7do/go-wind-plugins/broker/kafka` | segmentio/kafka-go |
+| RabbitMQ | `github.com/tx7do/go-wind-plugins/broker/rabbitmq` | rabbitmq/amqp091-go |
+| NATS | `github.com/tx7do/go-wind-plugins/broker/nats` | nats-io/nats.go |
+| MQTT | `github.com/tx7do/go-wind-plugins/broker/mqtt` | eclipse/paho.mqtt.golang |
+| Pulsar | `github.com/tx7do/go-wind-plugins/broker/pulsar` | apache/pulsar-client-go |
+| Redis | `github.com/tx7do/go-wind-plugins/broker/redis` | gomodule/redigo |
+| RocketMQ | `github.com/tx7do/go-wind-plugins/broker/rocketmq` | apache/rocketmq-client-go + rocketmq-clients |
+| NSQ | `github.com/tx7do/go-wind-plugins/broker/nsq` | nsqio/go-nsq |
+| SQS | `github.com/tx7do/go-wind-plugins/broker/sqs` | aws/aws-sdk-go-v2 |
+| GCP PubSub | `github.com/tx7do/go-wind-plugins/broker/gcpubsub` | cloud.google.com/go/pubsub |
+| Azure Service Bus | `github.com/tx7do/go-wind-plugins/broker/azuresb` | azure-sdk-for-go |
+| STOMP | `github.com/tx7do/go-wind-plugins/broker/stomp` | go-stomp/stomp |
+
 ---
 
 ## 架构设计
@@ -262,6 +296,17 @@ graph TB
         OS3[S3]
     end
 
+    subgraph Broker["消息代理"]
+        BKafka[Kafka]
+        BRabbitMQ[RabbitMQ]
+        BNATS[NATS]
+        BMQTT[MQTT]
+        BPulsar[Pulsar]
+        BRedis[Redis]
+        BRocketMQ[RocketMQ]
+        BNSQ[NSQ]
+    end
+
     App --> Core
     Core --> Config
     Core --> Registry
@@ -271,6 +316,7 @@ graph TB
     Core --> Metrics
     Core --> Workflow
     Core --> OSS
+    Core --> Broker
     Core --> Encoding
 
     subgraph Encoding["编解码"]
@@ -403,6 +449,29 @@ go-wind-plugins/
 │       ├── config.go              # 本地 Config 类型
 │       ├── errors.go              # 哨兵错误
 │       └── go.mod
+│
+├── broker/                        # 消息代理接口与插件
+│   ├── broker.go                  # Broker 接口定义（Publish/Subscribe/Request）
+│   ├── message.go                 # Message 结构体（Headers/Body/Key）
+│   ├── event.go                   # Event 接口（Topic/Message/Ack）
+│   ├── options.go                 # Broker 配置选项
+│   ├── subscriber.go              # Subscriber 管理（SubscriberSyncMap）
+│   ├── encoding.go                # 消息编解码集成
+│   ├── publish.go                 # Publish 中间件链
+│   ├── typed_handler.go           # 泛型 TypedHandler 支持
+│   ├── go.mod
+│   ├── kafka/                     # Apache Kafka（segmentio/kafka-go）
+│   ├── rabbitmq/                  # RabbitMQ（rabbitmq/amqp091-go）
+│   ├── nats/                      # NATS JetStream（nats-io/nats.go）
+│   ├── mqtt/                      # MQTT（eclipse/paho.mqtt.golang）
+│   ├── pulsar/                    # Apache Pulsar（apache/pulsar-client-go）
+│   ├── redis/                     # Redis Pub/Sub（gomodule/redigo）
+│   ├── rocketmq/                  # Apache RocketMQ（双 SDK 支持）
+│   ├── nsq/                       # NSQ（nsqio/go-nsq）
+│   ├── sqs/                       # AWS SQS（aws/aws-sdk-go-v2）
+│   ├── gcpubsub/                  # Google Cloud Pub/Sub
+│   ├── azuresb/                   # Azure Service Bus
+│   └── stomp/                     # STOMP 协议
 │
 ├── go.work                         # Go Workspace 多模块管理
 ├── LICENSE
@@ -650,6 +719,67 @@ func main() {
     http.Handle("/metrics", promhttp.Handler())
     log.Println("metrics on :9090/metrics")
     log.Fatal(http.ListenAndServe(":9090", nil))
+}
+```
+
+### 消息代理示例（Kafka）
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log/slog"
+
+    "github.com/tx7do/go-wind-plugins/broker"
+    kafkaBroker "github.com/tx7do/go-wind-plugins/broker/kafka"
+)
+
+func main() {
+    // 创建 Kafka Broker
+    b := kafkaBroker.NewBroker(
+        broker.WithAddress("localhost:9092"),
+        broker.WithCodec("json"),
+    )
+
+    if err := b.Init(); err != nil {
+        panic(err)
+    }
+    if err := b.Connect(); err != nil {
+        panic(err)
+    }
+    defer b.Disconnect()
+
+    // 发布消息
+    ctx := context.Background()
+    msg := map[string]any{"temperature": 25.5, "humidity": 60.0}
+    err := b.Publish(ctx, "sensor.temperature",
+        broker.NewMessage(msg,
+            broker.WithPublishHeaders(map[string]string{"version": "1.0"}),
+        ),
+    )
+    if err != nil {
+        slog.Error("publish failed", "error", err)
+    }
+    fmt.Println("message published")
+
+    // 订阅消息
+    _, err = b.Subscribe("sensor.temperature",
+        func(ctx context.Context, event broker.Event) error {
+            slog.Info("received",
+                "topic", event.Topic(),
+                "body", fmt.Sprintf("%v", event.Message().Body),
+            )
+            return nil
+        },
+        func() any { return &map[string]any{} },
+    )
+    if err != nil {
+        panic(err)
+    }
+
+    select {} // 阻塞等待消息
 }
 ```
 

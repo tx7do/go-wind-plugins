@@ -31,7 +31,7 @@
 
 ## 主な特徴
 - **統一インターフェース**：6つのドメイン（Config / Registry / Log / Metrics / Transport / Tracer）いずれもコアフレームワークが標準インターフェースを定義
-- **マルチエンジンサポート**：6種類のコンフィグセンター、8種類のレジストリ、6種類のログバックエンド、3種類のメトリクスバックエンド、3種類のHTTPドライバ、1種類のOTLPトレースプロトコル
+- **マルチエンジンサポート**：6種類のコンフィグセンター、8種類のレジストリ、6種類のログバックエンド、3種類のメトリクスバックエンド、3種類のHTTPドライバ、1種類のOTLPトレースプロトコル、12種類のメッセージブローカー
 - **ゼロ侵入**：ビジネスコードはインターフェースのみに依存し、特定エンジンのSDKには依存しない
 - **独立バージョン管理**：各サブモジュールが独自の `go.mod` を持ち、必要なものだけを導入可能
 - **Workspace連携**：`go.work` によるマルチモジュール管理で、単一リポジトリのような開発体験
@@ -92,6 +92,21 @@
 | `Metrics` | `Histogram(ctx, name, value, labels)` | ヒストグラム分布（レイテンシ、ペイロードサイズ） |
 | `Metrics` | `Gauge(ctx, name, value, labels)` | 現在の瞬間値（キューサイズ、アクティブ接続数） |
 | `Closer` | `Close() error` | クローズして保留中のデータをフラッシュ |
+
+### ブローカー（Broker）
+
+| インターフェース | メソッド | 説明 |
+|------|------|------|
+| `Broker` | `Name() string` | ブローカー名の取得 |
+| `Broker` | `Address() string` | ブローカーアドレスの取得 |
+| `Broker` | `Init(...Option) error` | ブローカーの初期化 |
+| `Broker` | `Connect() / Disconnect() error` | 接続 / 切断 |
+| `Broker` | `Publish(ctx, topic, *Message, ...PublishOption) error` | トピックにメッセージを公開 |
+| `Broker` | `Subscribe(topic, Handler, Binder, ...SubscribeOption) (Subscriber, error)` | トピックを購読 |
+| `Broker` | `Request(ctx, topic, *Message, ...RequestOption) (*Message, error)` | リクエスト-レスポンスパターン |
+| `Message` | `Headers / Body / Key` | メッセージヘッダー、本文、パーティションキー |
+| `Event` | `Topic() / Message() / Ack() / Error()` | サブスクライバーが受信したイベント |
+| `Subscriber` | `Unsubscribe() error` | 購読解除 |
 
 ### AI / LLM
 
@@ -214,6 +229,25 @@
 | MinIO | `github.com/tx7do/go-wind-plugins/oss/minio` | minio/minio-go |
 | S3 | `github.com/tx7do/go-wind-plugins/oss/s3` | aws/aws-sdk-go-v2 |
 
+### ブローカー（Broker）
+
+> 各ブローカーエンジンはSDKの差が大きく、各サブモジュールが独自の設定オプションを定義しますが、コア `broker.Broker` インターフェースを実装します。
+
+| プラグイン | モジュールパス | エンジン |
+|-----------|--------------|--------|
+| Kafka | `github.com/tx7do/go-wind-plugins/broker/kafka` | segmentio/kafka-go |
+| RabbitMQ | `github.com/tx7do/go-wind-plugins/broker/rabbitmq` | rabbitmq/amqp091-go |
+| NATS | `github.com/tx7do/go-wind-plugins/broker/nats` | nats-io/nats.go |
+| MQTT | `github.com/tx7do/go-wind-plugins/broker/mqtt` | eclipse/paho.mqtt.golang |
+| Pulsar | `github.com/tx7do/go-wind-plugins/broker/pulsar` | apache/pulsar-client-go |
+| Redis | `github.com/tx7do/go-wind-plugins/broker/redis` | gomodule/redigo |
+| RocketMQ | `github.com/tx7do/go-wind-plugins/broker/rocketmq` | apache/rocketmq-client-go + rocketmq-clients |
+| NSQ | `github.com/tx7do/go-wind-plugins/broker/nsq` | nsqio/go-nsq |
+| SQS | `github.com/tx7do/go-wind-plugins/broker/sqs` | aws/aws-sdk-go-v2 |
+| GCP PubSub | `github.com/tx7do/go-wind-plugins/broker/gcpubsub` | cloud.google.com/go/pubsub |
+| Azure Service Bus | `github.com/tx7do/go-wind-plugins/broker/azuresb` | azure-sdk-for-go |
+| STOMP | `github.com/tx7do/go-wind-plugins/broker/stomp` | go-stomp/stomp |
+
 ---
 
 ## アーキテクチャ
@@ -287,6 +321,17 @@ graph TB
         OS3[S3]
     end
 
+    subgraph Broker["ブローカー"]
+        BKafka[Kafka]
+        BRabbitMQ[RabbitMQ]
+        BNATS[NATS]
+        BMQTT[MQTT]
+        BPulsar[Pulsar]
+        BRedis[Redis]
+        BRocketMQ[RocketMQ]
+        BNSQ[NSQ]
+    end
+
     App --> Core
     Core --> Config
     Core --> Registry
@@ -297,6 +342,7 @@ graph TB
     Core --> AI
     Core --> Workflow
     Core --> OSS
+    Core --> Broker
     Core --> Encoding
 
     subgraph Encoding["エンコーディング"]
@@ -702,6 +748,64 @@ func main() {
     http.Handle("/metrics", promhttp.Handler())
     log.Println("metrics on :9090/metrics")
     log.Fatal(http.ListenAndServe(":9090", nil))
+}
+```
+
+### ブローカー例（Kafka）
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log/slog"
+
+    "github.com/tx7do/go-wind-plugins/broker"
+    kafkaBroker "github.com/tx7do/go-wind-plugins/broker/kafka"
+)
+
+func main() {
+    b := kafkaBroker.NewBroker(
+        broker.WithAddress("localhost:9092"),
+        broker.WithCodec("json"),
+    )
+
+    if err := b.Init(); err != nil {
+        panic(err)
+    }
+    if err := b.Connect(); err != nil {
+        panic(err)
+    }
+    defer b.Disconnect()
+
+    ctx := context.Background()
+    msg := map[string]any{"temperature": 25.5, "humidity": 60.0}
+    err := b.Publish(ctx, "sensor.temperature",
+        broker.NewMessage(msg,
+            broker.WithPublishHeaders(map[string]string{"version": "1.0"}),
+        ),
+    )
+    if err != nil {
+        slog.Error("publish failed", "error", err)
+    }
+    fmt.Println("message published")
+
+    _, err = b.Subscribe("sensor.temperature",
+        func(ctx context.Context, event broker.Event) error {
+            slog.Info("received",
+                "topic", event.Topic(),
+                "body", fmt.Sprintf("%v", event.Message().Body),
+            )
+            return nil
+        },
+        func() any { return &map[string]any{} },
+    )
+    if err != nil {
+        panic(err)
+    }
+
+    select {}
 }
 ```
 

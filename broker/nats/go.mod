@@ -11,6 +11,7 @@ replace (
 require (
 	github.com/nats-io/nats.go v1.51.0
 	github.com/stretchr/testify v1.11.1
+	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v1.3.3
 	github.com/tx7do/go-wind-plugins/testing v1.1.2
 	github.com/tx7do/go-wind-plugins/tracer/otlp v1.1.2

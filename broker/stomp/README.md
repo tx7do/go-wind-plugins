@@ -145,7 +145,4 @@ docker run -d \
 * 管理后台：<http://localhost:8161/admin/>
 * 默认账号名密码：admin/admin
 
-### Apache Apollo
-
-```shell
-```
+## 参考资料

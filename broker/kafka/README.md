@@ -114,8 +114,8 @@ b.Publish(ctx, "test-topic", broker.NewMessage(msg),
 | `kafka.WithAsync(enable)` | 异步发送（默认 true） |
 | `kafka.WithReadTimeout(d)` | 读取超时（默认 10s） |
 | `kafka.WithWriteTimeout(d)` | 写入超时（默认 10s） |
-| `kafka.WithEnableLogger(enable)` | 启用 Kratos info 日志 |
-| `kafka.WithEnableErrorLogger(enable)` | 启用 Kratos error 日志 |
+| `kafka.WithEnableLogger(enable)` | 启用框架 info 日志 |
+| `kafka.WithEnableErrorLogger(enable)` | 启用框架 error 日志 |
 | `kafka.WithAllowPublishAutoTopicCreation(enable)` | 允许自动创建 Topic |
 | `kafka.WithCompletion(fn)` | 消息发布完成回调 |
 

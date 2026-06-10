@@ -12,6 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/rabbitmq/amqp091-go v1.11.0
 	github.com/stretchr/testify v1.11.1
+	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v1.3.3
 	github.com/tx7do/go-wind-plugins/testing v1.1.2
 	github.com/tx7do/go-wind-plugins/tracer/otlp v1.1.2

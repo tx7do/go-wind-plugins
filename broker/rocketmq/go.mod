@@ -14,6 +14,7 @@ require (
 	github.com/apache/rocketmq-clients/golang/v5 v5.1.3
 	github.com/gogap/errors v0.0.0-20210818113853-edfbba0ddea9
 	github.com/stretchr/testify v1.11.1
+	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v1.3.3
 	github.com/tx7do/go-wind-plugins/testing v1.1.2
 	github.com/tx7do/go-wind-plugins/tracer/otlp v1.1.2

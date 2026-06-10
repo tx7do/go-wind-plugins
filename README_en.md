@@ -32,7 +32,7 @@ Built with a **Lego-like composition design** — each plugin implements only th
 ## Key Features
 
 - **Unified Interfaces**: Six domains (Config / Registry / Log / Metrics / Transport / Tracer) with standard interfaces defined by the core framework
-- **Multi-Engine Support**: 6 config centers, 8 registry providers, 6 logging backends, 3 metrics backends, 3 HTTP drivers, 1 OTLP tracing protocol — covering mainstream tech stacks
+- **Multi-Engine Support**: 6 config centers, 8 registry providers, 6 logging backends, 3 metrics backends, 3 HTTP drivers, 1 OTLP tracing protocol, 12 message brokers — covering mainstream tech stacks
 - **Zero Intrusion**: Business code depends only on interfaces, never on specific engine SDKs
 - **Independent Versioning**: Each submodule has its own `go.mod`, import only what you need
 - **Workspace Synergy**: Managed via `go.work` for a single-repo development experience
@@ -93,6 +93,21 @@ Built with a **Lego-like composition design** — each plugin implements only th
 | `Metrics` | `Histogram(ctx, name, value, labels)` | Distribution of observations (latency, payload size) |
 | `Metrics` | `Gauge(ctx, name, value, labels)` | Point-in-time value (queue depth, active connections) |
 | `Closer` | `Close() error` | Close and flush pending data |
+
+### Broker
+
+| Interface | Methods | Description |
+|------|------|------|
+| `Broker` | `Name() string` | Get broker name |
+| `Broker` | `Address() string` | Get broker address |
+| `Broker` | `Init(...Option) error` | Initialize broker |
+| `Broker` | `Connect() / Disconnect() error` | Connect / Disconnect |
+| `Broker` | `Publish(ctx, topic, *Message, ...PublishOption) error` | Publish message to topic |
+| `Broker` | `Subscribe(topic, Handler, Binder, ...SubscribeOption) (Subscriber, error)` | Subscribe to topic |
+| `Broker` | `Request(ctx, topic, *Message, ...RequestOption) (*Message, error)` | Request-response pattern |
+| `Message` | `Headers / Body / Key` | Message headers, body, partition key |
+| `Event` | `Topic() / Message() / Ack() / Error()` | Event received by subscriber |
+| `Subscriber` | `Unsubscribe() error` | Unsubscribe |
 
 ### AI / LLM
 
@@ -216,6 +231,25 @@ Built with a **Lego-like composition design** — each plugin implements only th
 | MinIO | `github.com/tx7do/go-wind-plugins/oss/minio` | minio/minio-go |
 | S3 | `github.com/tx7do/go-wind-plugins/oss/s3` | aws/aws-sdk-go-v2 |
 
+### Broker
+
+> Each Broker engine has its own SDK and configuration options, but all implement the core `broker.Broker` interface.
+
+| Plugin | Module Path | Engine |
+|--------|------------|--------|
+| Kafka | `github.com/tx7do/go-wind-plugins/broker/kafka` | segmentio/kafka-go |
+| RabbitMQ | `github.com/tx7do/go-wind-plugins/broker/rabbitmq` | rabbitmq/amqp091-go |
+| NATS | `github.com/tx7do/go-wind-plugins/broker/nats` | nats-io/nats.go |
+| MQTT | `github.com/tx7do/go-wind-plugins/broker/mqtt` | eclipse/paho.mqtt.golang |
+| Pulsar | `github.com/tx7do/go-wind-plugins/broker/pulsar` | apache/pulsar-client-go |
+| Redis | `github.com/tx7do/go-wind-plugins/broker/redis` | gomodule/redigo |
+| RocketMQ | `github.com/tx7do/go-wind-plugins/broker/rocketmq` | apache/rocketmq-client-go + rocketmq-clients |
+| NSQ | `github.com/tx7do/go-wind-plugins/broker/nsq` | nsqio/go-nsq |
+| SQS | `github.com/tx7do/go-wind-plugins/broker/sqs` | aws/aws-sdk-go-v2 |
+| GCP PubSub | `github.com/tx7do/go-wind-plugins/broker/gcpubsub` | cloud.google.com/go/pubsub |
+| Azure Service Bus | `github.com/tx7do/go-wind-plugins/broker/azuresb` | azure-sdk-for-go |
+| STOMP | `github.com/tx7do/go-wind-plugins/broker/stomp` | go-stomp/stomp |
+
 ---
 
 ## Architecture
@@ -289,6 +323,17 @@ graph TB
         OS3[S3]
     end
 
+    subgraph Broker["Broker"]
+        BKafka[Kafka]
+        BRabbitMQ[RabbitMQ]
+        BNATS[NATS]
+        BMQTT[MQTT]
+        BPulsar[Pulsar]
+        BRedis[Redis]
+        BRocketMQ[RocketMQ]
+        BNSQ[NSQ]
+    end
+
     App --> Core
     Core --> Config
     Core --> Registry
@@ -299,6 +344,7 @@ graph TB
     Core --> AI
     Core --> Workflow
     Core --> OSS
+    Core --> Broker
     Core --> Encoding
 
     subgraph Encoding["Encoding"]
@@ -457,6 +503,29 @@ go-wind-plugins/
 │       ├── config.go              # Local Config types
 │       ├── errors.go              # Sentinel errors
 │       └── go.mod
+│
+├── broker/                        # Message broker interfaces and plugins
+│   ├── broker.go                  # Broker interface (Publish/Subscribe/Request)
+│   ├── message.go                 # Message struct (Headers/Body/Key)
+│   ├── event.go                   # Event interface (Topic/Message/Ack)
+│   ├── options.go                 # Broker configuration options
+│   ├── subscriber.go              # Subscriber management (SubscriberSyncMap)
+│   ├── encoding.go                # Message encoding integration
+│   ├── publish.go                 # Publish middleware chain
+│   ├── typed_handler.go           # Generic TypedHandler support
+│   ├── go.mod
+│   ├── kafka/                     # Apache Kafka (segmentio/kafka-go)
+│   ├── rabbitmq/                  # RabbitMQ (rabbitmq/amqp091-go)
+│   ├── nats/                      # NATS JetStream (nats-io/nats.go)
+│   ├── mqtt/                      # MQTT (eclipse/paho.mqtt.golang)
+│   ├── pulsar/                    # Apache Pulsar (apache/pulsar-client-go)
+│   ├── redis/                     # Redis Pub/Sub (gomodule/redigo)
+│   ├── rocketmq/                  # Apache RocketMQ (dual SDK support)
+│   ├── nsq/                       # NSQ (nsqio/go-nsq)
+│   ├── sqs/                       # AWS SQS (aws/aws-sdk-go-v2)
+│   ├── gcpubsub/                  # Google Cloud Pub/Sub
+│   ├── azuresb/                   # Azure Service Bus
+│   └── stomp/                     # STOMP protocol
 │
 ├── go.work                         # Go Workspace multi-module management
 ├── LICENSE
@@ -704,6 +773,66 @@ func main() {
     http.Handle("/metrics", promhttp.Handler())
     log.Println("metrics on :9090/metrics")
     log.Fatal(http.ListenAndServe(":9090", nil))
+}
+```
+
+### Broker Example (Kafka)
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log/slog"
+
+    "github.com/tx7do/go-wind-plugins/broker"
+    kafkaBroker "github.com/tx7do/go-wind-plugins/broker/kafka"
+)
+
+func main() {
+    b := kafkaBroker.NewBroker(
+        broker.WithAddress("localhost:9092"),
+        broker.WithCodec("json"),
+    )
+
+    if err := b.Init(); err != nil {
+        panic(err)
+    }
+    if err := b.Connect(); err != nil {
+        panic(err)
+    }
+    defer b.Disconnect()
+
+    // Publish
+    ctx := context.Background()
+    msg := map[string]any{"temperature": 25.5, "humidity": 60.0}
+    err := b.Publish(ctx, "sensor.temperature",
+        broker.NewMessage(msg,
+            broker.WithPublishHeaders(map[string]string{"version": "1.0"}),
+        ),
+    )
+    if err != nil {
+        slog.Error("publish failed", "error", err)
+    }
+    fmt.Println("message published")
+
+    // Subscribe
+    _, err = b.Subscribe("sensor.temperature",
+        func(ctx context.Context, event broker.Event) error {
+            slog.Info("received",
+                "topic", event.Topic(),
+                "body", fmt.Sprintf("%v", event.Message().Body),
+            )
+            return nil
+        },
+        func() any { return &map[string]any{} },
+    )
+    if err != nil {
+        panic(err)
+    }
+
+    select {}
 }
 ```
 
