@@ -1,18 +1,10 @@
 package engine
 
 import (
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-)
-
-type AuthErrorCode int32
-
-const (
-	AuthErrorCodeMissingAuthClaims AuthErrorCode = 2001
-	AuthErrorCodeInvalidClaims     AuthErrorCode = 2002
+	errs "github.com/tx7do/go-wind-plugins/errors"
 )
 
 var (
-	ErrMissingAuthClaims = status.Error(codes.Code(AuthErrorCodeMissingAuthClaims), "context missing authz claims")
-	ErrInvalidClaims     = status.Error(codes.Code(AuthErrorCodeInvalidClaims), "invalid claims")
+	ErrMissingAuthClaims = errs.New(errs.StatusForbidden, "AUTHZ_MISSING_CLAIMS", "context missing authz claims")
+	ErrInvalidClaims     = errs.New(errs.StatusForbidden, "AUTHZ_INVALID_CLAIMS", "invalid claims")
 )
