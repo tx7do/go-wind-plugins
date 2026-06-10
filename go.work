@@ -112,6 +112,8 @@ use (
 	./transport/grpc/middleware/authn
 	./transport/grpc/middleware/authz
 	./transport/grpc/middleware/circuitbreaker
+	./transport/grpc/middleware/codec
+	./transport/grpc/middleware/crypto
 	./transport/grpc/middleware/errors
 	./transport/grpc/middleware/logging
 	./transport/grpc/middleware/metadata
@@ -131,6 +133,8 @@ use (
 	./transport/http/middleware/authz
 	./transport/http/middleware/circuitbreaker
 	./transport/http/middleware/cors
+	./transport/http/middleware/codec
+	./transport/http/middleware/crypto
 	./transport/http/middleware/errors
 	./transport/http/middleware/logging
 	./transport/http/middleware/metrics
