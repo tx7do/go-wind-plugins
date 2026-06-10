@@ -111,6 +111,7 @@ use (
 	./transport/grpc/middleware/authz
 	./transport/grpc/middleware/circuitbreaker
 	./transport/grpc/middleware/logging
+	./transport/grpc/middleware/metadata
 	./transport/grpc/middleware/metrics
 	./transport/grpc/middleware/ratelimit
 	./transport/grpc/middleware/recovery
@@ -118,6 +119,7 @@ use (
 	./transport/grpc/middleware/requestid
 	./transport/grpc/middleware/timeout
 	./transport/grpc/middleware/tracing
+	./transport/grpc/middleware/validate
 	./transport/grpc/server
 	./transport/http
 	./transport/http/fiber
@@ -128,6 +130,7 @@ use (
 	./transport/http/middleware/cors
 	./transport/http/middleware/logging
 	./transport/http/middleware/metrics
+	./transport/http/middleware/metadata
 	./transport/http/middleware/ratelimit
 	./transport/http/middleware/recovery
 	./transport/http/middleware/retry
