@@ -1,0 +1,10 @@
+{
+  "name": "my-service",
+  "port": 9090,
+  "debug": false,
+  "database": {
+    "host": "prod-db.example.com",
+    "port": 5432,
+    "username": "admin"
+  }
+}

@@ -6,9 +6,13 @@ require (
 	github.com/googollee/go-socket.io v1.7.0
 	github.com/tx7do/go-utils/crypto v0.0.2
 	github.com/tx7do/go-wind v0.0.1
+	github.com/tx7do/go-wind-plugins/cache v0.0.1
+	github.com/tx7do/go-wind-plugins/cache/local v0.0.0
+	github.com/tx7do/go-wind-plugins/config/file v0.0.0
 	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding/xml v0.0.0
 	github.com/tx7do/go-wind-plugins/registry/etcd v0.0.0
+	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/cron v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/logging v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/recovery v0.0.0
@@ -20,19 +24,28 @@ require (
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/logging v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid v0.0.0
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/tracing v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/socketio v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/sse v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/tcp v0.0.0
 	github.com/tx7do/go-wind-plugins/transport/websocket v0.0.0
 	go.etcd.io/etcd/client/v3 v3.6.10
+	go.opentelemetry.io/otel v1.43.0
+	go.opentelemetry.io/otel/trace v1.43.0
 	google.golang.org/grpc v1.80.0
 )
 
 require (
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
+	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/coocood/freecache v1.2.7 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -50,12 +63,20 @@ require (
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/tx7do/go-utils v1.1.40 // indirect
 	github.com/tx7do/go-utils/id v0.0.6 // indirect
+	github.com/tx7do/go-wind-plugins/config v0.0.0-00010101000000-000000000000 // indirect
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/registry v0.0.0-00010101000000-000000000000 // indirect
 	github.com/tx7do/go-wind-plugins/security/crypto v0.0.0 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.10 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.10 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
+	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
+	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
@@ -68,12 +89,17 @@ require (
 )
 
 replace (
+	github.com/tx7do/go-wind-plugins/cache => ../cache
+	github.com/tx7do/go-wind-plugins/cache/local => ../cache/local
+	github.com/tx7do/go-wind-plugins/config => ../config
+	github.com/tx7do/go-wind-plugins/config/file => ../config/file
 	github.com/tx7do/go-wind-plugins/encoding => ../encoding
 	github.com/tx7do/go-wind-plugins/encoding/json => ../encoding/json
 	github.com/tx7do/go-wind-plugins/encoding/xml => ../encoding/xml
 	github.com/tx7do/go-wind-plugins/registry => ../registry
 	github.com/tx7do/go-wind-plugins/registry/etcd => ../registry/etcd
 	github.com/tx7do/go-wind-plugins/security/crypto => ../security/crypto
+	github.com/tx7do/go-wind-plugins/tracer/otlp => ../tracer/otlp
 	github.com/tx7do/go-wind-plugins/transport/cron => ../transport/cron
 	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/logging => ../transport/grpc/middleware/logging
 	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/recovery => ../transport/grpc/middleware/recovery
@@ -85,6 +111,7 @@ replace (
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/logging => ../transport/http/middleware/logging
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery => ../transport/http/middleware/recovery
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid => ../transport/http/middleware/requestid
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/tracing => ../transport/http/middleware/tracing
 	github.com/tx7do/go-wind-plugins/transport/socketio => ../transport/socketio
 	github.com/tx7do/go-wind-plugins/transport/sse => ../transport/sse
 	github.com/tx7do/go-wind-plugins/transport/tcp => ../transport/tcp

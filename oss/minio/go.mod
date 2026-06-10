@@ -2,7 +2,10 @@ module github.com/tx7do/go-wind-plugins/oss/minio
 
 go 1.26.3
 
-require github.com/minio/minio-go/v7 v7.0.100
+require (
+	github.com/minio/minio-go/v7 v7.0.100
+	github.com/tx7do/go-wind v0.0.1
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

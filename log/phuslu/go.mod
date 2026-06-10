@@ -4,4 +4,4 @@ go 1.26.3
 
 require github.com/tx7do/go-wind v0.0.1
 
-require github.com/phuslu/log v1.0.125
+require github.com/phuslu/log v1.0.126
