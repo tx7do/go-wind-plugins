@@ -106,6 +106,8 @@ use (
 	./tracer
 	./tracer/otlp
 	./transport/grpc/client
+	./transport/grpc/middleware/authn
+	./transport/grpc/middleware/authz
 	./transport/grpc/server
 	./transport/http
 	./transport/http/fiber
