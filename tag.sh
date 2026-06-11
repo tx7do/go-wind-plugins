@@ -172,6 +172,7 @@ git tag transport/grpc/middleware/tracing/v0.0.1 --force
 git tag transport/grpc/middleware/validate/v0.0.1 --force
 git tag transport/grpc/server/v0.0.1 --force
 git tag transport/hptimer/v0.0.1 --force
+git tag transport/http/v0.0.1 --force
 git tag transport/http/driver/chi/v0.0.1 --force
 git tag transport/http/driver/fiber/v0.0.1 --force
 git tag transport/http/driver/gin/v0.0.1 --force
