@@ -109,14 +109,22 @@ func (f *FallbackReader) WatchValue(ctx context.Context, key string) (<-chan []b
 		wg.Add(1)
 		go func(ch <-chan []byte) {
 			defer wg.Done()
-			for range ch {
-				// Re-read to get the effective value respecting priority.
-				effective, err := f.Load(ctx, key)
-				if err != nil || effective == nil {
-					continue
-				}
+			for {
 				select {
-				case out <- effective:
+				case _, ok := <-ch:
+					if !ok {
+						return
+					}
+					// Re-read to get the effective value respecting priority.
+					effective, err := f.Load(ctx, key)
+					if err != nil || effective == nil {
+						continue
+					}
+					select {
+					case out <- effective:
+					case <-ctx.Done():
+						return
+					}
 				case <-ctx.Done():
 					return
 				}
