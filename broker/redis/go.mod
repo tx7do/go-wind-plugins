@@ -12,7 +12,7 @@ require (
 	github.com/gomodule/redigo v1.9.3
 	github.com/stretchr/testify v1.11.1
 	github.com/tx7do/go-wind v0.0.1
-	github.com/tx7do/go-wind-plugins/broker v1.3.3
+	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v1.1.2
 )
 

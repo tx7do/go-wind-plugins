@@ -13,7 +13,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tx7do/go-wind v0.0.1
-	github.com/tx7do/go-wind-plugins/broker v1.3.3
+	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v1.1.2
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0

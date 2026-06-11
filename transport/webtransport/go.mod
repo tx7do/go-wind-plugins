@@ -11,7 +11,7 @@ replace (
 require (
 	github.com/quic-go/quic-go v0.59.0
 	github.com/tx7do/go-wind v0.0.1
-	github.com/tx7do/go-wind-plugins/broker v0.0.0-00010101000000-000000000000
+	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v0.0.0-20260610141552-e0f0a8ee1a9d
 )

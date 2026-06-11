@@ -13,7 +13,7 @@ replace (
 require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tx7do/go-wind v0.0.1
-	github.com/tx7do/go-wind-plugins/broker v1.3.3
+	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/broker/azuresb v0.0.1
 	github.com/tx7do/go-wind-plugins/transport v0.0.1
 	go.opentelemetry.io/otel v1.43.0
