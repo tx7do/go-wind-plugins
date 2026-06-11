@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	"github.com/tx7do/go-wind-plugins/broker/rocketmq"
 	rocketmqOption "github.com/tx7do/go-wind-plugins/broker/rocketmq/option"
+	"github.com/tx7do/go-wind-plugins/metrics"
 
 	"github.com/tx7do/go-wind-plugins/transport"
 )
@@ -17,6 +19,7 @@ import (
 type Server struct {
 	broker.Broker
 	brokerOpts []broker.Option
+	m          metrics.Metrics
 	driverType rocketmqOption.DriverType
 
 	subscribers    broker.SubscriberMap
@@ -157,6 +160,8 @@ func RegisterSubscriber[T any](srv *Server, ctx context.Context, topic, groupNam
 }
 
 func (s *Server) doRegisterSubscriber(topic string, handler broker.Handler, binder broker.Binder, opts ...broker.SubscribeOption) error {
+	handler = s.wrapHandler(topic, handler)
+
 	sub, err := s.Subscribe(topic, handler, binder, opts...)
 	if err != nil {
 		return err
@@ -183,4 +188,32 @@ func (s *Server) doRegisterSubscriberMap() error {
 
 func (s *Server) Endpoint() string {
 	return ""
+}
+
+func (s *Server) wrapHandler(topic string, handler broker.Handler) broker.Handler {
+	if s.m == nil {
+		return handler
+	}
+	return func(ctx context.Context, event broker.Event) error {
+		startTime := time.Now()
+		labels := map[string]string{
+			"broker": s.Name(),
+			"topic":  topic,
+		}
+
+		s.m.Counter(ctx, "broker.messages.received", 1, labels)
+
+		err := handler(ctx, event)
+		s.m.Histogram(ctx, "broker.message.duration", time.Since(startTime).Seconds(), labels)
+
+		if err != nil {
+			s.m.Counter(ctx, "broker.messages.errors", 1, map[string]string{
+				"broker": s.Name(),
+				"topic":  topic,
+				"error":  "true",
+			})
+		}
+
+		return err
+	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	"github.com/tx7do/go-wind-plugins/broker/redis"
+	"github.com/tx7do/go-wind-plugins/metrics"
 )
 
 type ServerOption func(o *Server)
@@ -87,5 +88,12 @@ func WithMaxActive(n int) ServerOption {
 func WithDriverType(driverType redis.DriverType) ServerOption {
 	return func(s *Server) {
 		s.driverType = driverType
+	}
+}
+
+// WithMetrics 注入指标监控
+func WithMetrics(m metrics.Metrics) ServerOption {
+	return func(s *Server) {
+		s.m = m
 	}
 }

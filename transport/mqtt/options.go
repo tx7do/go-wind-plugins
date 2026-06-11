@@ -5,6 +5,7 @@ import (
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	"github.com/tx7do/go-wind-plugins/broker/mqtt"
+	"github.com/tx7do/go-wind-plugins/metrics"
 )
 
 type ServerOption func(o *Server)
@@ -64,5 +65,12 @@ func WithOnConnect(cb func()) ServerOption {
 func WithOnDisconnect(cb func(error)) ServerOption {
 	return func(s *Server) {
 		s.brokerOpts = append(s.brokerOpts, mqtt.WithOnDisconnect(cb))
+	}
+}
+
+// WithMetrics 注入指标监控
+func WithMetrics(m metrics.Metrics) ServerOption {
+	return func(s *Server) {
+		s.m = m
 	}
 }

@@ -2,7 +2,10 @@ module github.com/tx7do/go-wind-plugins/transport
 
 go 1.26.3
 
-require github.com/tx7do/go-wind-plugins/broker v0.0.1
+require (
+	github.com/tx7do/go-wind-plugins/broker v0.0.1
+	github.com/tx7do/go-wind-plugins/metrics v0.0.1
+)
 
 require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1 // indirect
 
@@ -37,5 +40,6 @@ require (
 
 replace (
 	github.com/tx7do/go-wind-plugins/broker => ../broker
+	github.com/tx7do/go-wind-plugins/metrics => ../metrics
 	github.com/tx7do/go-wind-plugins/tracer/otlp => ../tracer/otlp
 )

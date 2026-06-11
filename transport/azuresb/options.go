@@ -8,6 +8,7 @@ import (
 
 	"github.com/tx7do/go-wind-plugins/broker"
 	"github.com/tx7do/go-wind-plugins/broker/azuresb"
+	"github.com/tx7do/go-wind-plugins/metrics"
 )
 
 type ServerOption func(o *Server)
@@ -68,5 +69,12 @@ func WithTracerProvider(provider trace.TracerProvider, _ string) ServerOption {
 func WithPropagator(propagators propagation.TextMapPropagator) ServerOption {
 	return func(s *Server) {
 		s.brokerOpts = append(s.brokerOpts, broker.WithPropagator(propagators))
+	}
+}
+
+// WithMetrics 注入指标监控
+func WithMetrics(m metrics.Metrics) ServerOption {
+	return func(s *Server) {
+		s.m = m
 	}
 }
