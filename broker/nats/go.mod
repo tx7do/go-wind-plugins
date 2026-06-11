@@ -14,8 +14,8 @@ require (
 	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1
-	github.com/tx7do/go-wind-plugins/testing v1.1.2
-	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000
+	github.com/tx7do/go-wind-plugins/testing v0.0.1
+	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
 	google.golang.org/protobuf v1.36.11

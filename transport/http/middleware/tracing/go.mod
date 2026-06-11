@@ -3,7 +3,7 @@ module github.com/tx7do/go-wind-plugins/transport/http/middleware/tracing
 go 1.26.3
 
 require (
-	github.com/tx7do/go-wind-plugins/transport/http v0.0.0
+	github.com/tx7do/go-wind-plugins/transport/http v0.0.1
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
 )

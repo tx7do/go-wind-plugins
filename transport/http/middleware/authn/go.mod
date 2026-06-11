@@ -4,8 +4,8 @@ go 1.26.3
 
 require (
 	github.com/stretchr/testify v1.11.1
-	github.com/tx7do/go-wind-plugins/security/authn v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http v0.0.0
+	github.com/tx7do/go-wind-plugins/security/authn v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http v0.0.1
 	google.golang.org/grpc v1.80.0
 )
 

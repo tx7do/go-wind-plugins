@@ -15,13 +15,13 @@ require (
 	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/broker/rocketmq v0.0.1
-	github.com/tx7do/go-wind-plugins/testing v1.1.2
+	github.com/tx7do/go-wind-plugins/testing v0.0.1
 	github.com/tx7do/go-wind-plugins/transport v0.0.1
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
 )
 
-require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000 // indirect
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1 // indirect
 
 require (
 	contrib.go.opencensus.io/exporter/ocagent v0.7.0 // indirect

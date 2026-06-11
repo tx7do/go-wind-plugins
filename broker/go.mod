@@ -17,7 +17,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0
 )
 
-require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect

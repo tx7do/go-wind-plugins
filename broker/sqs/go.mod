@@ -15,10 +15,10 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
-	github.com/tx7do/go-wind-plugins/testing v1.1.2
+	github.com/tx7do/go-wind-plugins/testing v0.0.1
 )
 
-require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000 // indirect
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1 // indirect
 
 require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.15 // indirect

@@ -14,12 +14,12 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
-	github.com/tx7do/go-wind-plugins/testing v1.1.2
+	github.com/tx7do/go-wind-plugins/testing v0.0.1
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 )
 
-require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
 
 require (
 	github.com/AthenZ/athenz v1.12.42 // indirect

@@ -8,7 +8,7 @@ require (
 	github.com/casbin/casbin/v2 v2.135.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tx7do/go-wind v0.0.1
-	github.com/tx7do/go-wind-plugins/security/authz v0.0.0-00010101000000-000000000000
+	github.com/tx7do/go-wind-plugins/security/authz v0.0.1
 )
 
 require (

@@ -7,7 +7,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/stretchr/testify v1.11.1
-	github.com/tx7do/go-wind-plugins/security/authn v0.0.0
+	github.com/tx7do/go-wind-plugins/security/authn v0.0.1
 	google.golang.org/grpc v1.80.0
 )
 

@@ -7,28 +7,28 @@ require (
 	github.com/tx7do/go-utils/crypto v0.0.2
 	github.com/tx7do/go-wind v0.0.1
 	github.com/tx7do/go-wind-plugins/cache v0.0.1
-	github.com/tx7do/go-wind-plugins/cache/local v0.0.0
-	github.com/tx7do/go-wind-plugins/config/file v0.0.0
+	github.com/tx7do/go-wind-plugins/cache/local v0.0.1
+	github.com/tx7do/go-wind-plugins/config/file v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1
-	github.com/tx7do/go-wind-plugins/encoding/xml v0.0.0
-	github.com/tx7do/go-wind-plugins/registry/etcd v0.0.0
-	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/cron v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/logging v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/recovery v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/grpc/server v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http/driver/std v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http/middleware/codec v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http/middleware/crypto v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http/middleware/logging v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/http/middleware/tracing v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/socketio v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/sse v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/tcp v0.0.0
-	github.com/tx7do/go-wind-plugins/transport/websocket v0.0.0
+	github.com/tx7do/go-wind-plugins/encoding/xml v0.0.1
+	github.com/tx7do/go-wind-plugins/registry/etcd v0.0.1
+	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/cron v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/logging v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/grpc/middleware/recovery v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/grpc/server v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/driver/std v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/codec v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/crypto v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/logging v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/middleware/tracing v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/socketio v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/sse v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/tcp v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/websocket v0.0.1
 	go.etcd.io/etcd/client/v3 v3.6.10
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
@@ -66,7 +66,7 @@ require (
 	github.com/tx7do/go-wind-plugins/config v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/registry v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/security/crypto v0.0.0 // indirect
+	github.com/tx7do/go-wind-plugins/security/crypto v0.0.1 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.10 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.10 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect

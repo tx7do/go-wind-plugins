@@ -20,7 +20,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0
 )
 
-require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.0-00010101000000-000000000000 // indirect
+require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1 // indirect
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1 // indirect
