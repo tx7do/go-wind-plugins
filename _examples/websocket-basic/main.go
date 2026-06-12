@@ -1,6 +1,7 @@
 // Package main demonstrates a WebSocket server using go-wind.
 //
 // This example shows:
+//   - Reusing HTTP middleware (recovery, request-id, logging) via Server.Use()
 //   - Registering typed message handlers with JSON deserialization
 //   - Echoing messages back to the sender
 //   - Broadcasting messages to all connected clients
@@ -8,7 +9,7 @@
 //
 // Run:
 //
-//	go run ./examples/websocket-basic
+//	go run ./websocket-basic
 //
 // Test with websocat (https://github.com/nickelc/websocat):
 //
@@ -34,6 +35,9 @@ import (
 	"time"
 
 	_ "github.com/tx7do/go-wind-plugins/encoding/json" // side-effect: register JSON codec
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/logging"
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery"
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid"
 	wsServer "github.com/tx7do/go-wind-plugins/transport/websocket"
 )
 
@@ -61,6 +65,14 @@ func main() {
 				log.Printf("[disconnect] session %s disconnected (%d total)", sid, srv.SessionCount())
 			}
 		}),
+	)
+
+	// Reuse HTTP middleware — WebSocket upgrade is an HTTP request, so all
+	// transport/http middleware work out of the box via Server.Use().
+	srv.Use(
+		recovery.Middleware(),
+		requestid.Middleware(),
+		logging.Middleware(),
 	)
 
 	// Echo handler: deserializes chatMessage, logs it, sends it back.

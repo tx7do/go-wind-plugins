@@ -1,13 +1,14 @@
 // Package main demonstrates a Socket.IO server using go-wind.
 //
 // This example shows:
+//   - Reusing HTTP middleware (recovery, request-id, logging) via Server.Use()
 //   - Connection/disconnection callbacks
 //   - Registering event handlers in different namespaces
 //   - Emitting replies back to clients
 //
 // Run:
 //
-//	go run ./_examples/socketio-basic
+//	go run ./socketio-basic
 //
 // Test with a browser console:
 //
@@ -32,6 +33,9 @@ import (
 
 	socketio "github.com/googollee/go-socket.io"
 	_ "github.com/tx7do/go-wind-plugins/encoding/json" // side-effect: register JSON codec
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/logging"
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery"
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid"
 	sioServer "github.com/tx7do/go-wind-plugins/transport/socketio"
 )
 
@@ -40,6 +44,14 @@ func main() {
 		sioServer.WithAddress(":8000"),
 		sioServer.WithCodec("json"),
 		sioServer.WithPath("/socket.io/"),
+	)
+
+	// Reuse HTTP middleware — Socket.IO uses HTTP polling and WebSocket upgrade,
+	// so all transport/http middleware work out of the box via Server.Use().
+	srv.Use(
+		recovery.Middleware(),
+		requestid.Middleware(),
+		logging.Middleware(),
 	)
 
 	// Root namespace "/"
