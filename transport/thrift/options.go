@@ -6,6 +6,10 @@ import (
 	"github.com/apache/thrift/lib/go/thrift"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/tx7do/go-wind/log"
+
+	"github.com/tx7do/go-wind-plugins/metrics"
 )
 
 // Option 是 Thrift 服务器的配置选项。
@@ -42,16 +46,69 @@ func WithTransportConfig(buffered, framed bool, bufferSize int) Option {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Processor Wrappers (legacy convenience Options)
+// ---------------------------------------------------------------------------
+
 // WithTracer 设置 OpenTelemetry tracer，启用 RPC 级别的链路追踪。
+// Deprecated: 使用 WithProcessorWrappers(TracingWrapper(t)) 代替。
 func WithTracer(t trace.Tracer) Option {
 	return func(s *Server) {
-		s.tracer = t
+		s.wrappers = append(s.wrappers, TracingWrapper(t))
 	}
 }
 
 // WithTracerProvider 从全局 TracerProvider 创建并设置 tracer。
+// Deprecated: 使用 WithProcessorWrappers(TracingWrapper(...)) 代替。
 func WithTracerProvider() Option {
 	return func(s *Server) {
-		s.tracer = otel.GetTracerProvider().Tracer("go-wind/plugins/thrift")
+		tracer := otel.GetTracerProvider().Tracer("go-wind/plugins/thrift")
+		s.wrappers = append(s.wrappers, TracingWrapper(tracer))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Processor Wrappers (new)
+// ---------------------------------------------------------------------------
+
+// WithProcessorWrappers adds one or more [ProcessorWrapper] functions to the
+// server. Wrappers are applied in order: the first wrapper is outermost (runs
+// first on the way in, last on the way out).
+//
+// Example:
+//
+//	srv := thrift.NewServer(":7700",
+//	    thrift.WithProcessor(processor),
+//	    thrift.WithProcessorWrappers(
+//	        RecoveryWrapper(nil),
+//	        LoggingWrapper(nil),
+//	    ),
+//	)
+func WithProcessorWrappers(wrappers ...ProcessorWrapper) Option {
+	return func(s *Server) {
+		s.wrappers = append(s.wrappers, wrappers...)
+	}
+}
+
+// WithLogging enables logging for each RPC call.
+// If logger is nil, the global logger is used.
+func WithLogging(logger log.Logger) Option {
+	return func(s *Server) {
+		s.wrappers = append(s.wrappers, LoggingWrapper(logger))
+	}
+}
+
+// WithRecovery enables panic recovery for RPC handlers.
+// If logger is nil, the global logger is used.
+func WithRecovery(logger log.Logger) Option {
+	return func(s *Server) {
+		s.wrappers = append(s.wrappers, RecoveryWrapper(logger))
+	}
+}
+
+// WithMetrics enables RPC call metrics (counter + latency histogram).
+func WithMetrics(m metrics.Metrics) Option {
+	return func(s *Server) {
+		s.wrappers = append(s.wrappers, MetricsWrapper(m))
 	}
 }
