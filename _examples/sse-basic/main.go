@@ -1,12 +1,11 @@
 // Package main demonstrates a Server-Sent Events (SSE) server using go-wind.
 //
-// This example creates a named stream, registers a plain HTTP endpoint,
-// and publishes events periodically. SSE clients can subscribe via curl
-// or any EventSource-compatible client.
+// SSE runs over standard HTTP, so all transport/http middleware (recovery,
+// logging, request-id, etc.) can be reused directly via Server.Use().
 //
 // Run:
 //
-//	go run ./examples/sse-basic
+//	go run ./sse-basic
 //
 // Test:
 //
@@ -27,6 +26,9 @@ import (
 	"time"
 
 	_ "github.com/tx7do/go-wind-plugins/encoding/json" // side-effect: register JSON codec
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/logging"
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery"
+	"github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid"
 	sseServer "github.com/tx7do/go-wind-plugins/transport/sse"
 )
 
@@ -43,6 +45,13 @@ func main() {
 		sseServer.WithStreamIdKey("stream"), // query param: ?stream=<id>
 		sseServer.WithAutoStream(true),      // auto-create streams on subscribe
 		sseServer.WithAutoReplay(true),      // replay missed events on reconnect
+	)
+
+	// Reuse HTTP middleware — SSE is HTTP, so all http middleware work out of the box.
+	srv.Use(
+		recovery.Middleware(),
+		requestid.Middleware(),
+		logging.Middleware(),
 	)
 
 	// Pre-create a named stream.
