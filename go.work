@@ -194,7 +194,9 @@ use (
 	./transport/http/middleware/requestid
 	./transport/http/middleware/timeout
 	./transport/http/middleware/validate
+	./transport/http/binding
 	./transport/http/driver/std
+	./transport/http/benchmark
 	./workflow
 	./workflow/argo
 	./workflow/conductor
