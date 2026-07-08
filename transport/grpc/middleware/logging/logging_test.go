@@ -131,3 +131,43 @@ func TestStreamInterceptor_Success(t *testing.T) {
 	assert.Contains(t, output, "/pkg.Svc/StreamData")
 	assert.Contains(t, output, "OK")
 }
+
+// disabledLogger 的 Enabled 恒为 false，用于验证日志级别被过滤时，
+// interceptor 应跳过 args 装箱且不写任何日志。
+type disabledLogger struct{}
+
+func (disabledLogger) Debug(context.Context, string, ...any) {}
+func (disabledLogger) Info(context.Context, string, ...any)  {}
+func (disabledLogger) Warn(context.Context, string, ...any)  {}
+func (disabledLogger) Error(context.Context, string, ...any) {}
+func (disabledLogger) Enabled(log.Level) bool                 { return false }
+func (l disabledLogger) With(...any) log.Logger               { return l }
+
+// TestUnaryInterceptor_DisabledLogger 验证当 logger.Enabled 返回 false 时，
+// 不写日志且 handler 正常执行。
+func TestUnaryInterceptor_DisabledLogger(t *testing.T) {
+	interceptor := UnaryInterceptor(WithLogger(disabledLogger{}))
+
+	info := &grpc.UnaryServerInfo{FullMethod: "/pkg.Svc/GetUser"}
+	called := false
+	handler := func(_ context.Context, _ any) (any, error) {
+		called = true
+		return "ok", nil
+	}
+
+	resp, err := interceptor(context.Background(), nil, info, handler)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", resp)
+	assert.True(t, called, "handler must still run when logging disabled")
+}
+
+// TestStreamInterceptor_DisabledLogger 验证流拦截器同理。
+func TestStreamInterceptor_DisabledLogger(t *testing.T) {
+	interceptor := StreamInterceptor(WithLogger(disabledLogger{}))
+
+	info := &grpc.StreamServerInfo{FullMethod: "/pkg.Svc/StreamData"}
+	handler := func(_ any, _ grpc.ServerStream) error { return nil }
+
+	err := interceptor(nil, &fakeServerStream{ctx: context.Background()}, info, handler)
+	require.NoError(t, err)
+}

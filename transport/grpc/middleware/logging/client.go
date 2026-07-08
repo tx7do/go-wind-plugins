@@ -48,6 +48,11 @@ func UnaryClientInterceptor(opts ...Option) grpc.UnaryClientInterceptor {
 			}
 		}
 
+		// 若该日志级别被过滤，跳过 args 装箱，避免无谓开销。
+		if !cfg.logger.Enabled(level) {
+			return err
+		}
+
 		args := []any{
 			"method", method,
 			"target", cc.Target(),
@@ -105,6 +110,11 @@ func StreamClientInterceptor(opts ...Option) grpc.StreamClientInterceptor {
 			} else if st.Code() >= codes.NotFound {
 				level = log.LevelWarn
 			}
+		}
+
+		// 若该日志级别被过滤，跳过 args 装箱，避免无谓开销。
+		if !cfg.logger.Enabled(level) {
+			return stream, err
 		}
 
 		args := []any{

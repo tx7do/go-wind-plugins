@@ -82,6 +82,12 @@ func UnaryInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 			}
 		}
 
+		// 若该日志级别被过滤，跳过 args 装箱（log.Logger 接口提供 Enabled，
+		// 专为此设计），避免无谓的 slice + interface{} 装箱开销。
+		if !cfg.logger.Enabled(level) {
+			return resp, err
+		}
+
 		args := []any{
 			"method", info.FullMethod,
 			"latency_ms", latency.Milliseconds(),
@@ -133,6 +139,11 @@ func StreamInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 			} else if st.Code() >= codes.NotFound {
 				level = log.LevelWarn
 			}
+		}
+
+		// 若该日志级别被过滤，跳过 args 装箱，避免无谓开销。
+		if !cfg.logger.Enabled(level) {
+			return err
 		}
 
 		args := []any{
