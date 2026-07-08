@@ -14,6 +14,7 @@ package logging
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/tx7do/go-wind/log"
@@ -68,7 +69,9 @@ func Middleware(opts ...Option) httpPlugin.Middleware {
 			}
 
 			start := time.Now()
-			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+			// 池化 responseWriter：同步包装，handler 返回后即归还，安全。
+			rw := acquireResponseWriter(w)
+			defer releaseResponseWriter(rw)
 			next.ServeHTTP(rw, r)
 			latency := time.Since(start)
 
@@ -77,6 +80,12 @@ func Middleware(opts ...Option) httpPlugin.Middleware {
 				level = log.LevelError
 			} else if rw.status >= 400 {
 				level = log.LevelWarn
+			}
+
+			// 优化：若该日志级别被过滤，跳过 args 装箱（log.Logger 接口
+			// 提供 Enabled 方法，专为此场景设计）。避免 7 个 kv 的 ...any 装箱。
+			if !cfg.logger.Enabled(level) {
+				return
 			}
 
 			logAt(cfg.logger, level, r.Context(), "http request",
@@ -123,4 +132,26 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	size, err := rw.ResponseWriter.Write(b)
 	rw.size += size
 	return size, err
+}
+
+// --- sync.Pool 优化（responseWriter 复用） ---
+//
+// responseWriter 是同步包装：在 next.ServeHTTP 返回后立即归还，handler 不会
+// 异步持有它（标准 HTTP handler 语义），故可安全池化。
+
+var responseWriterPool = sync.Pool{
+	New: func() any { return &responseWriter{} },
+}
+
+func acquireResponseWriter(w http.ResponseWriter) *responseWriter {
+	rw := responseWriterPool.Get().(*responseWriter)
+	rw.ResponseWriter = w
+	rw.status = http.StatusOK
+	rw.size = 0
+	return rw
+}
+
+func releaseResponseWriter(rw *responseWriter) {
+	rw.ResponseWriter = nil
+	responseWriterPool.Put(rw)
 }

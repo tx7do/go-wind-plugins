@@ -16,6 +16,7 @@ package metrics
 import (
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/tx7do/go-wind-plugins/metrics"
@@ -92,14 +93,23 @@ func Middleware(m metrics.Metrics, opts ...Option) httpPlugin.Middleware {
 				return
 			}
 
-			m.Gauge(r.Context(), cfg.inFlightGauge, 1, cfg.labelFunc(r, 0))
-			defer m.Gauge(r.Context(), cfg.inFlightGauge, 0, cfg.labelFunc(r, 0))
+			// 优化：in-flight gauge 的进入/退出复用同一份 label（status=0），
+			// 将 labelFunc 调用次数从 3 次降到 2 次。
+			// 注意：不池化 label map —— metrics 后端实现（如 prometheus）
+			// 可能异步持有 labels map，池化会导致 data race。
+			gaugeLabels := cfg.labelFunc(r, 0)
+			m.Gauge(r.Context(), cfg.inFlightGauge, 1, gaugeLabels)
+			defer m.Gauge(r.Context(), cfg.inFlightGauge, 0, gaugeLabels)
 
-			rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			// 池化 statusRecorder（仅捕获 status，同步使用，handler 返回即归还，安全）。
+			rw := acquireStatusRecorder(w)
+			defer releaseStatusRecorder(rw)
+
 			start := time.Now()
 			next.ServeHTTP(rw, r)
 			latency := time.Since(start).Seconds()
 
+			// 结束时的 counter/histogram 用带真实 status 的 label（调用 1 次）。
 			labels := cfg.labelFunc(r, rw.status)
 			m.Counter(r.Context(), cfg.requestCounter, 1, labels)
 			m.Histogram(r.Context(), cfg.latencyHistogram, latency, labels)
@@ -114,6 +124,28 @@ func defaultLabels(r *http.Request, status int) map[string]string {
 		"path":   r.URL.Path,
 		"status": strconv.Itoa(status),
 	}
+}
+
+// --- sync.Pool 优化（statusRecorder 复用） ---
+//
+// statusRecorder 是同步包装结构：在 next.ServeHTTP 返回后立即归还，
+// 不存在异步持有的风险，故可安全池化。
+// （label map 不池化，因 metrics 后端可能异步读取 labels。）
+
+var statusRecorderPool = sync.Pool{
+	New: func() any { return &statusRecorder{} },
+}
+
+func acquireStatusRecorder(w http.ResponseWriter) *statusRecorder {
+	sr := statusRecorderPool.Get().(*statusRecorder)
+	sr.ResponseWriter = w
+	sr.status = http.StatusOK
+	return sr
+}
+
+func releaseStatusRecorder(sr *statusRecorder) {
+	sr.ResponseWriter = nil
+	statusRecorderPool.Put(sr)
 }
 
 // statusRecorder wraps [http.ResponseWriter] to capture the status code.
