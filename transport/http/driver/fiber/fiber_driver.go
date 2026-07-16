@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/gofiber/fiber/v2"
@@ -153,6 +154,19 @@ func (d *Driver) Handle(method, path string, handler http.HandlerFunc) {
 // 应用 fiber 中间件，请用 App() 获取底层应用直接注册。
 func (d *Driver) HandleFiber(method, path string, handler fiber.Handler) {
 	d.app.Add(method, path, handler)
+}
+
+// HandlePrefix 在 prefix 下挂载 handler，匹配 prefix 及其所有子路径。
+// 用 fiber 的通配符路由 "<prefix>/*" 实现，经 net/http↔fasthttp 适配层
+// （复用 adaptFiber 的 sync.Pool 优化），handler 接收原始请求路径。
+// 注册所有 HTTP 方法（Use），适用于静态资源、Swagger UI 等场景。
+func (d *Driver) HandlePrefix(prefix string, h http.Handler) {
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	// adaptFiber 接收 http.HandlerFunc；将 http.Handler 适配为 http.HandlerFunc。
+	adapter := adaptFiber(http.HandlerFunc(h.ServeHTTP))
+	d.app.Use(prefix+"*", adapter)
 }
 
 // App 返回底层 *fiber.App，用于需要直接操作应用的高级场景

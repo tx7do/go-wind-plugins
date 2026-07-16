@@ -784,6 +784,54 @@ func main() {
 }
 ```
 
+### Swagger UI 文档
+
+为 HTTP 服务器挂载嵌入式 Swagger UI，支持远程 URL、本地文件和内存数据三种文档源。
+
+```go
+package main
+
+import (
+    "context"
+
+    httpServer "github.com/tx7do/go-wind-plugins/transport/http"
+    "github.com/tx7do/go-wind-plugins/transport/http/driver/std"
+    "github.com/tx7do/go-wind-plugins/transport/http/swagger"
+)
+
+func main() {
+    srv := httpServer.NewServer(":8080",
+        httpServer.WithDriver(std.NewDriver()),
+    )
+
+    // 方式一：远程 URL，前端直接拉取 openapi.json
+    swagger.Register(srv,
+        swagger.WithTitle("Petstore"),
+        swagger.WithRemoteFileURL("https://petstore3.swagger.io/api/v3/openapi.json"),
+        swagger.WithBasePath("/docs/"),
+    )
+
+    // 方式二：本地文件，服务端读取并托管
+    // swagger.Register(srv,
+    //     swagger.WithTitle("API"),
+    //     swagger.WithLocalFile("./openapi.json"),
+    //     swagger.WithBasePath("/docs/"),
+    // )
+
+    // 方式三：内存数据，托管动态生成的文档
+    // data := generateOpenAPI()
+    // swagger.Register(srv,
+    //     swagger.WithTitle("API"),
+    //     swagger.WithMemoryData(data, "json"),
+    //     swagger.WithBasePath("/docs/"),
+    // )
+
+    srv.Start(context.Background())
+}
+```
+
+访问 `http://localhost:8080/docs/` 即可看到交互式 API 文档。
+
 ### 日志示例（Zap）
 
 ```go

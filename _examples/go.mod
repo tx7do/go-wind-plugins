@@ -41,6 +41,7 @@ require (
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery v0.0.1
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid v0.0.1
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/tracing v0.0.1
+	github.com/tx7do/go-wind-plugins/transport/http/swagger v0.0.1
 	github.com/tx7do/go-wind-plugins/transport/kafka v0.0.1
 	github.com/tx7do/go-wind-plugins/transport/socketio v0.0.1
 	github.com/tx7do/go-wind-plugins/transport/sse v0.0.1
@@ -169,6 +170,7 @@ replace (
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/recovery => ../transport/http/middleware/recovery
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/requestid => ../transport/http/middleware/requestid
 	github.com/tx7do/go-wind-plugins/transport/http/middleware/tracing => ../transport/http/middleware/tracing
+	github.com/tx7do/go-wind-plugins/transport/http/swagger => ../transport/http/swagger
 	github.com/tx7do/go-wind-plugins/transport/kafka => ../transport/kafka
 	github.com/tx7do/go-wind-plugins/transport/socketio => ../transport/socketio
 	github.com/tx7do/go-wind-plugins/transport/sse => ../transport/sse

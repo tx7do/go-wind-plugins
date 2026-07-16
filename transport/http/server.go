@@ -19,6 +19,10 @@ type Middleware func(http.Handler) http.Handler
 // 这使得 Server 能够获取实际绑定地址（用于 :0 随机端口场景）并统一处理 TLS。
 type Driver interface {
 	Handle(method, path string, handler http.HandlerFunc)
+	// HandlePrefix 在 prefix 下挂载一个 http.Handler，匹配 prefix 及其所有子路径。
+	// 用于嵌入静态资源、Swagger UI 等「前缀路由」场景。
+	// 与 Handle 不同：不经过 Server.Use 注册的中间件链，handler 接收原始路径（不做 strip）。
+	HandlePrefix(prefix string, h http.Handler)
 	Start(ctx context.Context, ln net.Listener) error
 	Stop(ctx context.Context) error
 }
@@ -91,6 +95,19 @@ func (s *Server) HEAD(path string, handler http.HandlerFunc) {
 // OPTIONS 注册 OPTIONS 请求路由。
 func (s *Server) OPTIONS(path string, handler http.HandlerFunc) {
 	s.Handle(http.MethodOptions, path, handler)
+}
+
+// HandlePrefix 在 prefix 下挂载一个 http.Handler，匹配 prefix 及其所有子路径。
+// 用于 Swagger UI、pprof、静态文件服务等「前缀路由」场景。
+//
+// 与 Handle 的区别：handler 不经过 Server.Use 注册的中间件链
+// （这类 handler 通常自带完整逻辑，如静态资源服务，套业务中间件无意义且有开销），
+// 且由 driver 负责前缀匹配，handler 收到的是原始请求路径。
+//
+// 若未通过 WithDriver 设置驱动，将 panic。
+func (s *Server) HandlePrefix(prefix string, h http.Handler) {
+	s.mustDriver()
+	s.driver.HandlePrefix(prefix, h)
 }
 
 // Start 启动 HTTP 服务器。

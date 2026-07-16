@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	httpPlugin "github.com/tx7do/go-wind-plugins/transport/http"
@@ -94,6 +95,17 @@ func WithMiddleware(middleware ...gin.HandlerFunc) Option {
 // 可复用本插件中间件与 binding，但无法使用 *gin.Context 的能力。
 func (d *Driver) Handle(method, path string, handler http.HandlerFunc) {
 	d.engine.Handle(method, path, gin.WrapF(handler))
+}
+
+// HandlePrefix 在 prefix 下挂载 handler，匹配 prefix 及其所有子路径。
+// 用 gin 的通配符路由 "<prefix>/*filepath" 实现，handler 接收原始请求路径
+// （不做 strip，与 httpPlugin.Driver 接口约定一致）。
+// 接受所有 HTTP 方法（Any），适用于静态资源、Swagger UI 等场景。
+func (d *Driver) HandlePrefix(prefix string, h http.Handler) {
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	d.engine.Any(prefix+"*filepath", gin.WrapH(h))
 }
 
 // HandleGin 注册 gin 原生 handler（func(*gin.Context)）。
