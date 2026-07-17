@@ -832,6 +832,47 @@ func main() {
 
 访问 `http://localhost:8080/docs/` 即可看到交互式 API 文档。
 
+### ReDoc 文档
+
+备选文档渲染引擎 ReDoc，同样支持远程 URL 和本地文件两种文档源。
+
+```go
+package main
+
+import (
+    "context"
+
+    httpServer "github.com/tx7do/go-wind-plugins/transport/http"
+    "github.com/tx7do/go-wind-plugins/transport/http/driver/std"
+    "github.com/tx7do/go-wind-plugins/transport/http/redoc"
+)
+
+func main() {
+    srv := httpServer.NewServer(":8080",
+        httpServer.WithDriver(std.NewDriver()),
+    )
+
+    // 远程 URL 模式
+    redoc.Register(srv,
+        redoc.WithTitle("Petstore"),
+        redoc.WithDescription("A sample API powered by ReDoc"),
+        redoc.WithRemoteFileURL("https://petstore3.swagger.io/api/v3/openapi.json"),
+        redoc.WithBasePath("/redoc/"),
+    )
+
+    // 本地文件模式
+    // redoc.Register(srv,
+    //     redoc.WithTitle("Petstore"),
+    //     redoc.WithLocalFile("./openapi.json"),
+    //     redoc.WithBasePath("/redoc/"),
+    // )
+
+    srv.Start(context.Background())
+}
+```
+
+访问 `http://localhost:8080/redoc/` 即可看到 ReDoc 渲染的交互式文档。
+
 ### 日志示例（Zap）
 
 ```go

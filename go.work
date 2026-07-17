@@ -175,6 +175,7 @@ use (
 
 	./transport/http
 	./transport/http/swagger
+	./transport/http/redoc
 	./transport/http/driver/chi
 	./transport/http/driver/fiber
 	./transport/http/driver/gin
