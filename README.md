@@ -1,16 +1,12 @@
-<p align="center">
-  <h1 align="center">Go Wind Plugins · 风行插件库</h1>
-  <p align="center">
-    Go Wind 微服务框架的多引擎插件生态
-  </p>
-  <p align="center">
-    <em>一套接口，多种引擎，按需组装，即插即用</em>
-  </p>
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="README.md">中文</a> · <a href="README_en.md">English</a> · <a href="README_ja.md">日本語</a>
-</p>
+<img src="docs/brand/vortex-tile.svg" width="120" alt="Go Wind Plugins · 风行插件库" />
+
+# Go Wind Plugins · 风行插件库
+
+[English](./README_en.md) | **中文** | [日本語](./README_ja.md)
+
+</div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=Go" alt="Go Version" />
@@ -119,6 +115,19 @@
 | 包函数 | `RegisterCodec(c)` / `GetCodec(name)` | 全局注册表 |
 
 ---
+
+### AI（大模型集成）
+
+> 三家框架的返回类型互不兼容——因此不定义抽象接口。
+> 仅提供共享配置类型 `ai.Config`。
+>
+> 各插件的构造函数直接返回其框架的原生类型。
+
+| 输入 | 构造函数 | 返回 |
+|-------|-------------|---------|
+| `ai.Config` | `model.NewClient(cfg)` | `*openai.Client` |
+| `ai.Config` | `eino.NewChatModel(ctx, cfg)` | `model.ChatModel`（Eino 接口） |
+| `ai.Config` | `langchaingo.NewModel(cfg)` | `llms.Model`（LangChainGo 接口） |
 
 ## 插件矩阵
 
@@ -499,9 +508,26 @@ graph TB
 go-wind-plugins/
 ├── ai/                             # AI 大模型集成
 │   ├── openai/                     # OpenAI SDK
-│   ├── langchaingo/               # LangChainGo
+│   │   ├── client.go               # 返回 *openai.Client
+│   │   ├── config.go               # 本地 Config 类型
+│   │   └── options.go              # HTTP 客户端选项
+│   ├── langchaingo/                # LangChainGo
+│   │   ├── client.go               # 返回 llms.Model
+│   │   ├── config.go               # 本地 Config 类型
+│   │   ├── agent.go                # Agent / Executor 辅助函数
+│   │   ├── chain.go                # Chain 辅助函数
+│   │   ├── memory.go               # Memory 辅助函数
+│   │   ├── embedding.go            # Embedding 辅助函数
+│   │   ├── vectorstore.go          # VectorStore 辅助函数
+│   │   └── options.go              # OpenAI/Ollama/HTTP 选项
 │   └── eino/                       # CloudWeGo Eino
-│
+│       ├── client.go               # 返回 model.ChatModel
+│       ├── config.go               # 本地 Config 类型
+│       ├── compose.go              # Chain/Graph/Workflow 辅助函数
+│       ├── chain.go                # Chain 节点追加方法
+│       ├── prompt.go               # ChatTemplate 辅助函数
+│       ├── tool.go                 # Tool 节点辅助函数
+│       └── options.go              # ChatModel 配置修改器
 ├── broker/                         # 消息代理接口与插件
 │   ├── broker.go                   # Broker 接口定义
 │   ├── kafka/                      # Apache Kafka
@@ -515,20 +541,24 @@ go-wind-plugins/
 │   ├── sqs/                        # AWS SQS
 │   ├── gcpubsub/                   # Google Cloud Pub/Sub
 │   ├── azuresb/                    # Azure Service Bus
-│   └── stomp/                      # STOMP 协议
-│
+│   ├── stomp/                      # STOMP 协议
+│   ├── message.go                  # 消息结构体（Headers/Body/Key）
+│   ├── event.go                    # Event 接口（Topic/Message/Ack）
+│   ├── options.go                  # Broker configuration options
+│   ├── subscriber.go               # 订阅者管理（SubscriberSyncMap）
+│   ├── encoding.go                 # 消息编码集成
+│   ├── publish.go                  # 发布中间件链
+│   └── typed_handler.go            # 泛型 TypedHandler 支持
 ├── cache/                          # 缓存接口与插件
 │   ├── cache.go                    # Cache 接口定义
 │   ├── local/                      # 本地内存缓存
 │   └── redis/                      # Redis 缓存
-│
 ├── circuitbreaker/                 # 熔断器接口与插件
 │   ├── circuitbreaker.go           # CircuitBreaker 接口定义
 │   ├── hystrix/                    # Hystrix
 │   ├── sentinel/                   # Sentinel
 │   ├── sres/                       # SRE 自适应熔断
 │   └── vegas/                      # Vegas 自适应限流
-│
 ├── config/                         # 配置中心接口与插件
 │   ├── config.go                   # 标准接口定义
 │   ├── apollo/                     # 携程 Apollo
@@ -545,12 +575,14 @@ go-wind-plugins/
 │   ├── redis/                      # Redis KV
 │   ├── vault/                      # HashiCorp Vault
 │   └── zookeeper/                  # Apache ZooKeeper
-│
 ├── encoding/                       # 编解码接口与插件
 │   ├── encoding.go                 # Codec 接口定义 + 注册表
 │   ├── json/                       # JSON
+│   │   └── json.go
 │   ├── proto/                      # Protobuf
+│   │   └── proto.go
 │   ├── yaml/                       # YAML
+│   │   └── yaml.go
 │   ├── toml/                       # TOML
 │   ├── xml/                        # XML
 │   ├── msgpack/                    # MessagePack
@@ -560,11 +592,8 @@ go-wind-plugins/
 │   ├── flatbuffers/                # FlatBuffers
 │   ├── gob/                        # Gob
 │   └── thrift/                     # Apache Thrift
-│
 ├── errors/                         # 统一错误码与错误类型
-│
 ├── health/                         # HTTP 健康检查
-│
 ├── log/                            # 日志接口与适配器
 │   ├── slog_logger.go              # slog 适配器（默认）
 │   ├── aliyun/                     # 阿里云 SLS
@@ -579,24 +608,32 @@ go-wind-plugins/
 │   ├── sentry/                     # Sentry
 │   ├── tencent/                    # 腾讯云 CLS
 │   ├── zap/                        # zap
-│   └── zerolog/                    # zerolog
-│
+│   ├── zerolog/                    # zerolog
+│   ├── level_filter.go             # 日志级别过滤器
+│   └── multi_logger.go             # 多路日志器
 ├── metrics/                        # 指标监控接口与插件
 │   ├── prometheus/                 # Prometheus
+│   │   └── prometheus.go           # Prometheus provider 实现
 │   ├── otel/                       # OpenTelemetry
-│   └── datadog/                    # Datadog
-│
+│   │   └── otel.go                 # OTLP 指标导出器配置
+│   ├── datadog/                    # Datadog
+│   │   └── datadog.go              # DogStatsD provider 实现
+│   ├── metrics.go                  # Metrics 接口（Counter/Histogram/Gauge）
+│   └── doc.go                      # 包文档
 ├── oss/                            # 对象存储
 │   ├── minio/                      # MinIO
+│   │   ├── client.go               # 返回 *minio.Client
+│   │   └── config.go               # 本地 Config 类型
 │   └── s3/                         # AWS S3
-│
+│       ├── client.go               # 返回 *s3.Client
+│       ├── storage.go              # 存储包装器（默认桶）
+│       ├── config.go               # 本地 Config 类型
+│       └── errors.go               # Sentinel 错误
 ├── pprof/                          # 性能分析端点
-│
 ├── ratelimit/                      # 限流器接口与插件
 │   ├── tokenbucket/                # 令牌桶
 │   ├── bbr/                        # BBR
 │   └── sentinel/                   # Sentinel
-│
 ├── registry/                       # 服务注册发现接口与插件
 │   ├── consul/                     # Consul
 │   ├── etcd/                       # etcd
@@ -605,23 +642,21 @@ go-wind-plugins/
 │   ├── nacos/                      # Nacos
 │   ├── polaris/                    # Polaris
 │   ├── servicecomb/                # ServiceComb
-│   └── zookeeper/                  # ZooKeeper
-│
+│   ├── zookeeper/                  # ZooKeeper
+│   ├── registrar.go                # Registrar 接口
+│   └── discovery.go                # Discovery / Watcher 接口
 ├── retry/                          # 重试策略
-│
 ├── security/                       # 安全模块
 │   ├── authn/                      # 认证（JWT/OAuth2/OIDC）
 │   ├── authz/                      # 授权（Casbin）
 │   └── crypto/                     # 加解密
-│
 ├── tracer/                         # 分布式追踪
 │   └── otlp/                       # OpenTelemetry OTLP
-│
+│       └── otlp.go                 # 返回原生 *sdktrace.TracerProvider
 ├── transport/                      # 传输层接口与驱动
 │   ├── http/                       # HTTP Server + Driver 接口
-│   │   ├── chi/                    # Chi 驱动
-│   │   ├── gin/                    # Gin 驱动
-│   │   └── fiber/                  # Fiber 驱动
+│   │   ├── server.go               # 服务端实现（路由/中间件/TLS）
+│   │   └── options.go              # 配置选项
 │   ├── http3/                      # HTTP/3 (QUIC)
 │   ├── grpc/                       # gRPC
 │   ├── websocket/                  # WebSocket
@@ -640,13 +675,28 @@ go-wind-plugins/
 │   ├── asynq/                      # Asynq 异步任务队列
 │   ├── machinery/                  # Machinery (类 Celery)
 │   └── mcp/                        # Model Context Protocol
-│
 ├── workflow/                       # 工作流引擎
 │   ├── argo/                       # Argo Workflows
+│   │   ├── client.go               # Submit/Get/Suspend/Resume/Terminate
+│   │   ├── options.go              # 配置选项 + Argo 类型定义
+│   │   └── logger.go               # slog 日志包装器
 │   ├── conductor/                  # Conductor
+│   │   ├── client.go               # Start/Get/Pause/Resume/Terminate
+│   │   ├── worker.go               # 任务 Worker
+│   │   ├── options.go              # 配置选项
+│   │   └── logger.go
 │   ├── goworkflows/                # GoWorkflows
-│   └── temporal/                   # Temporal
-│
+│   │   ├── client.go               # Create/Cancel/Signal/Wait
+│   │   ├── worker.go               # Workflow + Activity Worker
+│   │   ├── options.go              # Worker 选项
+│   │   └── logger.go
+│   ├── temporal/                   # Temporal
+│   │   ├── client.go               # Execute/Signal/Query/Cancel（原生 OTel 追踪）
+│   │   ├── worker.go               # Worker + 内置消息处理 Activity
+│   │   ├── workflow.go             # 内置 BrokerMessageWorkflow
+│   │   ├── options.go              # 配置选项
+│   │   └── logger.go
+│   └── workflow.go                 # 通用接口（Client/Worker）
 ├── go.work                         # Go Workspace 多模块管理
 ├── LICENSE
 └── README.md
@@ -1046,8 +1096,46 @@ func main() {
 }
 ```
 
----
+### AI（大模型集成）示例（LangChainGo）
 
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/tx7do/go-wind-plugins/ai"
+    "github.com/tx7do/go-wind-plugins/ai/langchaingo"
+)
+
+func main() {
+    cfg := &ai.Config{
+        Type:      ai.ModelTypeCloud,
+        ModelName: "gpt-4o",
+        Cloud: &ai.CloudConfig{
+            ApiKey:  "sk-xxx",
+            BaseUrl: "https://api.openai.com/v1",
+        },
+        TimeoutSeconds: 60,
+    }
+
+    llm, err := langchaingo.NewModel(cfg)
+    if err != nil {
+        panic(err)
+    }
+
+    resp, err := llm.Call(context.Background(),
+        "Explain microservices in one sentence",
+    )
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(resp)
+}
+```
+
+---
 ## 设计理念
 
 ### 乐高式组合

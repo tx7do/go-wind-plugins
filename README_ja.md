@@ -1,16 +1,12 @@
-<p align="center">
-  <h1 align="center">Go Wind Plugins · 風行プラグインライブラリ</h1>
-  <p align="center">
-    Go Wind マイクロサービスフレームワークのマルチエンジンプラグインエコシステム
-  </p>
-  <p align="center">
-    <em>一つのインターフェース、複数のエンジン、必要に応じて組み合わせ、プラグ＆プレイ</em>
-  </p>
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="README.md">中文</a> · <a href="README_en.md">English</a> · <a href="README_ja.md">日本語</a>
-</p>
+<img src="docs/brand/vortex-tile.svg" width="120" alt="Go Wind Plugins · 風行プラグインライブラリ" />
+
+# Go Wind Plugins · 風行プラグインライブラリ
+
+[English](./README_en.md) | [中文](./README.md) | **日本語**
+
+</div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=Go" alt="Go Version" />
@@ -30,10 +26,11 @@
 ---
 
 ## 主な特徴
-- **統一インターフェース**：6つのドメイン（Config / Registry / Log / Metrics / Transport / Tracer）いずれもコアフレームワークが標準インターフェースを定義
-- **マルチエンジンサポート**：6種類のコンフィグセンター、8種類のレジストリ、6種類のログバックエンド、3種類のメトリクスバックエンド、3種類のHTTPドライバ、1種類のOTLPトレースプロトコル、12種類のメッセージブローカー
+
+- **統一インターフェース**：8つのドメイン（Config / Registry / Log / Metrics / Transport / Broker / Encoding / Tracer）いずれもコアフレームワークが標準インターフェースを定義し、プラグインは実装のみを行う
+- **マルチエンジンサポート**：12種類のコンフィグセンター、8種類のレジストリ、14種類のログバックエンド、3種類のメトリクスバックエンド、4種類のHTTPドライバ、20+種類のトランスポート層プロトコル、12種類のメッセージブローカー、11種類のコーデック、3種類のAI SDK、1種類のOTLPトレースプロトコル。主流のテクノロジースタックを網羅
 - **ゼロ侵入**：ビジネスコードはインターフェースのみに依存し、特定エンジンのSDKには依存しない
-- **独立バージョン管理**：各サブモジュールが独自の `go.mod` を持ち、必要なものだけを導入可能
+- **独立バージョン管理**：各サブモジュールが独自の `go.mod` を持ち、必要なものだけを導入し、依存の肥大化を回避
 - **Workspace連携**：`go.work` によるマルチモジュール管理で、単一リポジトリのような開発体験
 
 ---
@@ -76,22 +73,13 @@
 
 ### 分散トレーシング（Tracer）
 
+> OpenTelemetry 標準に基づき、カスタムインターフェースは定義せず、ネイティブ OTel 型を直接使用します。
+
 | インターフェース | メソッド | 説明 |
 |-----------------|---------|------|
 | `*sdktrace.TracerProvider` | `Tracer(name) trace.Tracer` | 標準 OTel Tracer を作成 |
 | `*sdktrace.TracerProvider` | `Shutdown(ctx)` | プロバイダーをシャットダウンし、保留中の Span をフラッシュ |
 | `trace.Tracer` | `Start(ctx, name, opts...)` | Span を作成し、トレースコンテキストを注入 |
-
-> OpenTelemetry 標準に基づき、カスタムインターフェースは定義せず、ネイティブ OTel 型を直接使用します。
-
-### メトリクス（Metrics）
-
-| インターフェース | メソッド | 説明 |
-|-----------------|---------|------|
-| `Metrics` | `Counter(ctx, name, value, labels)` | 単調増加カウンター（要求数、エラー数） |
-| `Metrics` | `Histogram(ctx, name, value, labels)` | ヒストグラム分布（レイテンシ、ペイロードサイズ） |
-| `Metrics` | `Gauge(ctx, name, value, labels)` | 現在の瞬間値（キューサイズ、アクティブ接続数） |
-| `Closer` | `Close() error` | クローズして保留中のデータをフラッシュ |
 
 ### ブローカー（Broker）
 
@@ -108,17 +96,14 @@
 | `Event` | `Topic() / Message() / Ack() / Error()` | サブスクライバーが受信したイベント |
 | `Subscriber` | `Unsubscribe() error` | 購読解除 |
 
-### AI / LLM
+### メトリクス（Metrics）
 
-> 3つのフレームワークは戻り値の型が互換性がないため、抽象インターフェースは定義せず、共有設定型 `ai.Config` のみを提供します。
->
-> 各プラグインのコンストラクタはフレームワークのネイティブ型を直接返します。
-
-| 入力 | コンストラクタ | 戻り値 |
-|------|-------------|--------|
-| `ai.Config` | `model.NewClient(cfg)` | `*openai.Client` |
-| `ai.Config` | `eino.NewChatModel(ctx, cfg)` | `model.ChatModel` (Eino インターフェース) |
-| `ai.Config` | `langchaingo.NewModel(cfg)` | `llms.Model` (LangChainGo インターフェース) |
+| インターフェース | メソッド | 説明 |
+|-----------------|---------|------|
+| `Metrics` | `Counter(ctx, name, value, labels)` | 単調増加カウンター（要求数、エラー数） |
+| `Metrics` | `Histogram(ctx, name, value, labels)` | ヒストグラム分布（レイテンシ、ペイロードサイズ） |
+| `Metrics` | `Gauge(ctx, name, value, labels)` | 現在の瞬間値（キューサイズ、アクティブ接続数） |
+| `Closer` | `Close() error` | クローズして保留中のデータをフラッシュ |
 
 ### エンコーディング（Encoding）
 
@@ -130,6 +115,19 @@
 | パッケージ関数 | `RegisterCodec(c)` / `GetCodec(name)` | グローバルレジストリ |
 
 ---
+
+### AI / LLM
+
+> 3つのフレームワークは戻り値の型が互換性がないため、抽象インターフェースは定義しません。
+> 共有設定型 `ai.Config` のみを提供します。
+>
+> 各プラグインのコンストラクタはフレームワークのネイティブ型を直接返します。
+
+| 入力 | コンストラクタ | 戻り値 |
+|------|-------------|--------|
+| `ai.Config` | `model.NewClient(cfg)` | `*openai.Client` |
+| `ai.Config` | `eino.NewChatModel(ctx, cfg)` | `model.ChatModel` (Eino インターフェース) |
+| `ai.Config` | `langchaingo.NewModel(cfg)` | `llms.Model` (LangChainGo インターフェース) |
 
 ## プラグイン一覧
 
@@ -143,6 +141,14 @@
 | Kubernetes | `github.com/tx7do/go-wind-plugins/config/kubernetes` | K8s ConfigMap / Secret |
 | Nacos | `github.com/tx7do/go-wind-plugins/config/nacos` | Alibaba Nacos |
 | Polaris | `github.com/tx7do/go-wind-plugins/config/polaris` | Tencent Polaris |
+| Env | `github.com/tx7do/go-wind-plugins/config/env` | 環境変数 |
+| File | `github.com/tx7do/go-wind-plugins/config/file` | ローカルファイル |
+| FS | `github.com/tx7do/go-wind-plugins/config/fs` | fs.FS |
+| HTTP | `github.com/tx7do/go-wind-plugins/config/http` | HTTP リモート取得 |
+| OSS | `github.com/tx7do/go-wind-plugins/config/oss` | オブジェクトストレージ |
+| Redis | `github.com/tx7do/go-wind-plugins/config/redis` | Redis KV |
+| Vault | `github.com/tx7do/go-wind-plugins/config/vault` | HashiCorp Vault |
+| Zookeeper | `github.com/tx7do/go-wind-plugins/config/zookeeper` | Apache ZooKeeper |
 
 ### サービスディスカバリ（Registry）
 
@@ -167,6 +173,13 @@
 | Logrus | `github.com/tx7do/go-wind-plugins/log/logrus` | sirupsen/logrus |
 | Zap | `github.com/tx7do/go-wind-plugins/log/zap` | uber-go/zap |
 | Zerolog | `github.com/tx7do/go-wind-plugins/log/zerolog` | rs/zerolog |
+| Charm | `github.com/tx7do/go-wind-plugins/log/charm` | charmbracelet/log |
+| CloudWatch | `github.com/tx7do/go-wind-plugins/log/cloudwatch` | AWS CloudWatch Logs |
+| Glog | `github.com/tx7do/go-wind-plugins/log/glog` | golang/glog |
+| Hclog | `github.com/tx7do/go-wind-plugins/log/hclog` | hashicorp/go-hclog |
+| Loki | `github.com/tx7do/go-wind-plugins/log/loki` | Grafana Loki |
+| Phuslu | `github.com/tx7do/go-wind-plugins/log/phuslu` | phuslu/log |
+| Sentry | `github.com/tx7do/go-wind-plugins/log/sentry` | getsentry/sentry-go |
 
 ### トランスポート（Transport）
 
@@ -176,6 +189,24 @@
 | HTTP（Gin） | `github.com/tx7do/go-wind-plugins/transport/http/gin` | gin-gonic/gin |
 | HTTP（Fiber） | `github.com/tx7do/go-wind-plugins/transport/http/fiber` | gofiber/fiber |
 | gRPC | `github.com/tx7do/go-wind-plugins/transport/grpc` | google.golang.org/grpc |
+| HTTP (Chi) | `github.com/tx7do/go-wind-plugins/transport/http/chi` | go-chi/chi |
+| HTTP/3 | `github.com/tx7do/go-wind-plugins/transport/http3` | quic-go/http3 |
+| WebSocket | `github.com/tx7do/go-wind-plugins/transport/websocket` | gorilla/websocket |
+| Socket.IO | `github.com/tx7do/go-wind-plugins/transport/socketio` | googollee/go-socket.io |
+| SignalR | `github.com/tx7do/go-wind-plugins/transport/signalr` | SignalR プロトコル |
+| SSE | `github.com/tx7do/go-wind-plugins/transport/sse` | Server-Sent Events |
+| TCP | `github.com/tx7do/go-wind-plugins/transport/tcp` | net.Listener |
+| KCP | `github.com/tx7do/go-wind-plugins/transport/kcp` | xtaci/kcp-go |
+| WebRTC | `github.com/tx7do/go-wind-plugins/transport/webrtc` | pion/webrtc v4 |
+| WebTransport | `github.com/tx7do/go-wind-plugins/transport/webtransport` | webtransport-go |
+| GraphQL | `github.com/tx7do/go-wind-plugins/transport/graphql` | graphql-go |
+| Thrift | `github.com/tx7do/go-wind-plugins/transport/thrift` | Apache Thrift |
+| tRPC | `github.com/tx7do/go-wind-plugins/transport/trpc` | tRPC プロトコル |
+| Cron | `github.com/tx7do/go-wind-plugins/transport/cron` | robfig/cron |
+| HPTimer | `github.com/tx7do/go-wind-plugins/transport/hptimer` | 高精度タイマー |
+| Asynq | `github.com/tx7do/go-wind-plugins/transport/asynq` | hibiken/asynq |
+| Machinery | `github.com/tx7do/go-wind-plugins/transport/machinery` | machinery（Celery 系） |
+| MCP | `github.com/tx7do/go-wind-plugins/transport/mcp` | Model Context Protocol |
 
 ### 分散トレーシング（Tracer）
 
@@ -193,14 +224,6 @@
 | OpenTelemetry | `github.com/tx7do/go-wind-plugins/metrics/otel` | OTLP (gRPC/HTTP) |
 | Datadog | `github.com/tx7do/go-wind-plugins/metrics/datadog` | DogStatsD |
 
-### AI / LLM
-
-| プラグイン | モジュールパス | フレームワーク |
-|-----------|--------------|---------------|
-| OpenAI Client | `github.com/tx7do/go-wind-plugins/ai/openai` | sashabaranov/go-openai |
-| Eino | `github.com/tx7do/go-wind-plugins/ai/eino` | cloudwego/eino |
-| LangChainGo | `github.com/tx7do/go-wind-plugins/ai/langchaingo` | tmc/langchaingo |
-
 ### エンコーディング（Encoding）
 
 | プラグイン | モジュールパス | エンジン |
@@ -208,6 +231,15 @@
 | JSON | `github.com/tx7do/go-wind-plugins/encoding/json` | encoding/json |
 | Protobuf | `github.com/tx7do/go-wind-plugins/encoding/proto` | google.golang.org/protobuf |
 | YAML | `github.com/tx7do/go-wind-plugins/encoding/yaml` | gopkg.in/yaml.v3 |
+| TOML | `github.com/tx7do/go-wind-plugins/encoding/toml` | pelletier/go-toml |
+| XML | `github.com/tx7do/go-wind-plugins/encoding/xml` | encoding/xml |
+| MsgPack | `github.com/tx7do/go-wind-plugins/encoding/msgpack` | vmihailenco/msgpack |
+| Avro | `github.com/tx7do/go-wind-plugins/encoding/avro` | linkedin/goavro |
+| BSON | `github.com/tx7do/go-wind-plugins/encoding/bson` | go.mongodb.org/mongo-driver |
+| CBOR | `github.com/tx7do/go-wind-plugins/encoding/cbor` | fxamacker/cbor |
+| FlatBuffers | `github.com/tx7do/go-wind-plugins/encoding/flatbuffers` | google/flatbuffers |
+| Gob | `github.com/tx7do/go-wind-plugins/encoding/gob` | encoding/gob |
+| Thrift | `github.com/tx7do/go-wind-plugins/encoding/thrift` | Apache Thrift |
 
 ### ワークフロー
 
@@ -228,6 +260,57 @@
 |-----------|--------------|---------------|
 | MinIO | `github.com/tx7do/go-wind-plugins/oss/minio` | minio/minio-go |
 | S3 | `github.com/tx7do/go-wind-plugins/oss/s3` | aws/aws-sdk-go-v2 |
+
+### AI / LLM
+
+> 各 AI サブモジュールは独自の設定とクライアントを定義し、異なる大規模言語モデルサービスをサポートします。
+
+| プラグイン | モジュールパス | フレームワーク |
+|-----------|--------------|---------------|
+| OpenAI Client | `github.com/tx7do/go-wind-plugins/ai/openai` | sashabaranov/go-openai |
+| Eino | `github.com/tx7do/go-wind-plugins/ai/eino` | cloudwego/eino |
+| LangChainGo | `github.com/tx7do/go-wind-plugins/ai/langchaingo` | tmc/langchaingo |
+
+### キャッシュ
+
+| プラグイン | モジュールパス | エンジン |
+|-----------|--------------|---------|
+| Local | `github.com/tx7do/go-wind-plugins/cache/local` | ローカルメモリキャッシュ |
+| Redis | `github.com/tx7do/go-wind-plugins/cache/redis` | gomodule/redigo |
+
+### サーキットブレーカー
+
+| プラグイン | モジュールパス | エンジン |
+|-----------|--------------|---------|
+| Hystrix | `github.com/tx7do/go-wind-plugins/circuitbreaker/hystrix` | afex/hystrix-go |
+| Sentinel | `github.com/tx7do/go-wind-plugins/circuitbreaker/sentinel` | alibaba/sentinel-golang |
+| SRE | `github.com/tx7do/go-wind-plugins/circuitbreaker/sres` | SRE 適応的サーキットブレーキング |
+| Vegas | `github.com/tx7do/go-wind-plugins/circuitbreaker/vegas` | Vegas 適応的レートリミット |
+
+### レートリミッター
+
+| プラグイン | モジュールパス | エンジン |
+|-----------|--------------|---------|
+| Token Bucket | `github.com/tx7do/go-wind-plugins/ratelimit/tokenbucket` | トークンバケットアルゴリズム |
+| BBR | `github.com/tx7do/go-wind-plugins/ratelimit/bbr` | BBR 適応的レートリミット |
+| Sentinel | `github.com/tx7do/go-wind-plugins/ratelimit/sentinel` | alibaba/sentinel-golang |
+
+### セキュリティ
+
+| プラグイン | モジュールパス | エンジン |
+|-----------|--------------|---------|
+| JWT | `github.com/tx7do/go-wind-plugins/security/authn` | golang-jwt/jwt |
+| Casbin | `github.com/tx7do/go-wind-plugins/security/authz` | casbin/casbin |
+| Crypto | `github.com/tx7do/go-wind-plugins/security/crypto` | go-utils/crypto |
+
+### その他のツールモジュール
+
+| モジュール | パス | 説明 |
+|------|------|------|
+| Errors | `github.com/tx7do/go-wind-plugins/errors` | 統一エラーコードとエラータイプ |
+| Health | `github.com/tx7do/go-wind-plugins/health` | HTTP ヘルスチェック |
+| Pprof | `github.com/tx7do/go-wind-plugins/pprof` | プロファイリングエンドポイント |
+| Retry | `github.com/tx7do/go-wind-plugins/retry` | リトライポリシー（指数バックオフ） |
 
 ### ブローカー（Broker）
 
@@ -261,9 +344,17 @@ graph TB
         CApollo[Apollo]
         CConsul[Consul]
         CEtcd[etcd]
+        CEnv[Env]
+        CFile[File]
+        CFS[FS]
+        CHTTP[HTTP]
         CK8s[Kubernetes]
         CNacos[Nacos]
+        COSS[OSS]
         CPolaris[Polaris]
+        CRedis[Redis]
+        CVault[Vault]
+        CZK[ZooKeeper]
     end
 
     subgraph Registry["サービスディスカバリ"]
@@ -279,18 +370,43 @@ graph TB
 
     subgraph Log["ログ"]
         LAliyun[Aliyun SLS]
-        LTencent[Tencent CLS]
+        LCharm[Charm]
+        LCloudWatch[CloudWatch]
         LFluent[Fluent]
+        LGlog[Glog]
+        LHclog[Hclog]
         LLogrus[Logrus]
+        LLoki[Loki]
+        LPhuslu[Phuslu]
+        LSentry[Sentry]
+        LTencent[Tencent CLS]
         LZap[Zap]
         LZerolog[Zerolog]
     end
 
     subgraph Transport["トランスポート"]
         THTTP[HTTP]
+        TChi[Chi]
         TGin[Gin]
         TFiber[Fiber]
+        THTTP3[HTTP/3]
         TGRPC[gRPC]
+        TWS[WebSocket]
+        TSIO[Socket.IO]
+        TSignalR[SignalR]
+        TSSE[SSE]
+        TTCP[TCP]
+        TKCP[KCP]
+        TWebRTC[WebRTC]
+        TWT[WebTransport]
+        TGraphQL[GraphQL]
+        TThrift[Thrift]
+        TTRPC[tRPC]
+        TCron[Cron]
+        THPTimer[HPTimer]
+        TAsynq[Asynq]
+        TMachinery[Machinery]
+        TMCP[MCP]
     end
 
     subgraph Tracer["分散トレーシング"]
@@ -301,12 +417,6 @@ graph TB
         MProm[Prometheus]
         MOtel[OTLP]
         MDatadog[Datadog]
-    end
-
-    subgraph AI["AI / LLM"]
-        AOpenai[OpenAI Client]
-        AEino[Eino]
-        ALc[LangChainGo]
     end
 
     subgraph Workflow["ワークフロー"]
@@ -330,6 +440,47 @@ graph TB
         BRedis[Redis]
         BRocketMQ[RocketMQ]
         BNSQ[NSQ]
+        BSQS[SQS]
+        BGCP[GCP PubSub]
+        BAzure[Azure SB]
+        BActiveMQ[ActiveMQ]
+        BSTOMP[STOMP]
+    end
+
+    subgraph Encoding["エンコーディング"]
+        EJSON[JSON]
+        EProto[Protobuf]
+        EYAML[YAML]
+        ETOML[TOML]
+        EXML[XML]
+        EMsgPack[MsgPack]
+        EAvro[Avro]
+        EBSON[BSON]
+        EFlat[FlatBuffers]
+    end
+
+    subgraph AI["AI / LLM"]
+        AOpenAI[OpenAI]
+        ALangChain[LangChainGo]
+        AEino[Eino]
+    end
+
+    subgraph Cache["キャッシュ"]
+        CacheLocal[Local]
+        CacheRedis[Redis]
+    end
+
+    subgraph Security["セキュリティ"]
+        SAuthN[JWT]
+        SAuthZ[Casbin]
+        SCrypto[Crypto]
+    end
+
+    subgraph Resilience["レジリエンス"]
+        RCBHystrix[Hystrix]
+        RCBSentinel[Sentinel]
+        RCBRatelimit[Token Bucket]
+        RCBBBR[BBR]
     end
 
     App --> Core
@@ -339,17 +490,14 @@ graph TB
     Core --> Transport
     Core --> Tracer
     Core --> Metrics
-    Core --> AI
     Core --> Workflow
     Core --> OSS
     Core --> Broker
     Core --> Encoding
-
-    subgraph Encoding["エンコーディング"]
-        EJSON[JSON]
-        EProto[Protobuf]
-        EYAML[YAML]
-    end
+    Core --> AI
+    Core --> Cache
+    Core --> Security
+    Core --> Resilience
 ```
 
 ---
@@ -358,20 +506,135 @@ graph TB
 
 ```
 go-wind-plugins/
+├── ai/                             # AI / LLM プラグイン（独立した自己完結モジュール）
+│   ├── openai/                     # OpenAI 互換クライアント（sashabaranov/go-openai）
+│   │   ├── client.go               # *openai.Client を返す
+│   │   ├── config.go               # ローカル Config 型
+│   │   └── options.go              # HTTP クライアントオプション
+│   ├── langchaingo/                # LangChainGo（tmc/langchaingo）
+│   │   ├── client.go               # llms.Model を返す
+│   │   ├── config.go               # ローカル Config 型
+│   │   ├── agent.go                # Agent / Executor ヘルパー
+│   │   ├── chain.go                # Chain ヘルパー
+│   │   ├── memory.go               # Memory ヘルパー
+│   │   ├── embedding.go            # Embedding ヘルパー
+│   │   ├── vectorstore.go          # VectorStore ヘルパー
+│   │   └── options.go              # OpenAI/Ollama/HTTP オプション
+│   └── eino/                       # ByteDance Eino フレームワーク（cloudwego/eino）
+│       ├── client.go               # model.ChatModel を返す
+│       ├── config.go               # ローカル Config 型
+│       ├── compose.go              # Chain/Graph/Workflow ヘルパー
+│       ├── chain.go                # Chain ノード追加メソッド
+│       ├── prompt.go               # ChatTemplate ヘルパー
+│       ├── tool.go                 # Tool ノードヘルパー
+│       └── options.go              # ChatModel 設定モディファイア
+├── broker/                         # メッセージブローカーインターフェースとプラグイン
+│   ├── broker.go                   # Broker インターフェース定義
+│   ├── kafka/                      # Apache Kafka
+│   ├── rabbitmq/                   # RabbitMQ
+│   ├── nats/                       # NATS JetStream
+│   ├── mqtt/                       # MQTT
+│   ├── pulsar/                     # Apache Pulsar
+│   ├── redis/                      # Redis Pub/Sub
+│   ├── rocketmq/                   # Apache RocketMQ
+│   ├── nsq/                        # NSQ
+│   ├── sqs/                        # AWS SQS
+│   ├── gcpubsub/                   # Google Cloud Pub/Sub
+│   ├── azuresb/                    # Azure Service Bus
+│   ├── stomp/                      # STOMP プロトコル
+│   ├── message.go                  # メッセージ構造体（Headers/Body/Key）
+│   ├── event.go                    # Event インターフェース（Topic/Message/Ack）
+│   ├── options.go                  # Broker configuration options
+│   ├── subscriber.go               # サブスクライバ管理（SubscriberSyncMap）
+│   ├── encoding.go                 # メッセージエンコーディング統合
+│   ├── publish.go                  # パブリッシュミドルウェアチェーン
+│   └── typed_handler.go            # ジェネリック TypedHandler サポート
+├── cache/                          # キャッシュインターフェースとプラグイン
+│   ├── cache.go                    # Cache インターフェース定義
+│   ├── local/                      # ローカルメモリキャッシュ
+│   └── redis/                      # Redis キャッシュ
+├── circuitbreaker/                 # サーキットブレーカーインターフェースとプラグイン
+│   ├── circuitbreaker.go           # CircuitBreaker インターフェース定義
+│   ├── hystrix/                    # Hystrix
+│   ├── sentinel/                   # Sentinel
+│   ├── sres/                       # SRE 適応的サーキットブレーキング
+│   └── vegas/                      # Vegas 適応的レートリミット
 ├── config/                         # コンフィグセンターインターフェースとプラグイン
 │   ├── config.go                   # 標準インターフェース定義（Reader/Watcher/ValueWatcher...）
-│   ├── go.mod
 │   ├── apollo/                     # Ctrip Apollo
 │   ├── consul/                     # HashiCorp Consul KV
 │   ├── etcd/                       # CoreOS etcd
+│   ├── env/                        # 環境変数
+│   ├── file/                       # ローカルファイル
+│   ├── fs/                         # fs.FS
+│   ├── http/                       # HTTP リモート取得
 │   ├── kubernetes/                 # Kubernetes ConfigMap/Secret
 │   ├── nacos/                      # Alibaba Nacos
-│   └── polaris/                    # Tencent Polaris
-│
+│   ├── oss/                        # オブジェクトストレージ
+│   ├── polaris/                    # Tencent Polaris
+│   ├── redis/                      # Redis KV
+│   ├── vault/                      # HashiCorp Vault
+│   └── zookeeper/                  # Apache ZooKeeper
+├── encoding/                       # エンコーディングインターフェースとプラグイン
+│   ├── encoding.go                 # Codec インターフェース定義 + レジストリ
+│   ├── json/                       # JSON コーデック（encoding/json）
+│   │   └── json.go
+│   ├── proto/                      # Protobuf コーデック（google.golang.org/protobuf）
+│   │   └── proto.go
+│   ├── yaml/                       # YAML コーデック（gopkg.in/yaml.v3）
+│   │   └── yaml.go
+│   ├── toml/                       # TOML
+│   ├── xml/                        # XML
+│   ├── msgpack/                    # MessagePack
+│   ├── avro/                       # Avro
+│   ├── bson/                       # BSON
+│   ├── cbor/                       # CBOR
+│   ├── flatbuffers/                # FlatBuffers
+│   ├── gob/                        # Gob
+│   └── thrift/                     # Apache Thrift
+├── errors/                         # 統一エラーコードとエラータイプ
+├── health/                         # HTTP ヘルスチェック
+├── log/                            # ログインターフェースとアダプタ
+│   ├── slog_logger.go              # 標準ライブラリ slog アダプタ（デフォルト実装）
+│   ├── aliyun/                     # Alibaba Cloud SLS
+│   ├── charm/                      # Charm
+│   ├── cloudwatch/                 # AWS CloudWatch
+│   ├── fluent/                     # Fluentd
+│   ├── glog/                       # glog
+│   ├── hclog/                      # hclog
+│   ├── logrus/                     # sirupsen/logrus
+│   ├── loki/                       # Grafana Loki
+│   ├── phuslu/                     # phuslu/log
+│   ├── sentry/                     # Sentry
+│   ├── tencent/                    # Tencent Cloud CLS
+│   ├── zap/                        # uber-go/zap
+│   ├── zerolog/                    # rs/zerolog
+│   ├── level_filter.go             # レベルフィルタ
+│   └── multi_logger.go             # マルチロガー
+├── metrics/                        # メトリクスインターフェースとプラグイン
+│   ├── prometheus/                 # Prometheus client_golang 実装
+│   │   └── prometheus.go           # Prometheus provider 実装
+│   ├── otel/                       # OpenTelemetry OTLP 実装
+│   │   └── otel.go                 # OTLP metric exporter 設定
+│   ├── datadog/                    # Datadog DogStatsD 実装
+│   │   └── datadog.go              # DogStatsD provider 実装
+│   ├── metrics.go                  # Metrics インターフェース定義（Counter/Histogram/Gauge）
+│   └── doc.go                      # パッケージドキュメント
+├── oss/                            # オブジェクトストレージプラグイン（自己完結型設定）
+│   ├── minio/                      # MinIO（minio/minio-go）
+│   │   ├── client.go               # *minio.Client を返す
+│   │   └── config.go               # ローカル Config 型
+│   └── s3/                         # AWS S3 互換（aws-sdk-go-v2）
+│       ├── client.go               # *s3.Client を返す
+│       ├── storage.go              # Storage ラッパー（デフォルト bucket）
+│       ├── config.go               # ローカル Config 型
+│       └── errors.go               # センチネルエラー
+├── pprof/                          # プロファイリングエンドポイント
+├── ratelimit/                      # レートリミッターインターフェースとプラグイン
+│   ├── tokenbucket/                # トークンバケット
+│   ├── bbr/                        # BBR
+│   └── sentinel/                   # Sentinel
 ├── registry/                       # サービスディスカバリインターフェースとプラグイン
-│   ├── registrar.go                # Registrar インターフェース
-│   ├── discovery.go                # Discovery / Watcher インターフェース
-│   ├── go.mod
 │   ├── consul/                     # HashiCorp Consul
 │   ├── etcd/                       # CoreOS etcd
 │   ├── eureka/                     # Netflix Eureka
@@ -379,129 +642,61 @@ go-wind-plugins/
 │   ├── nacos/                      # Alibaba Nacos
 │   ├── polaris/                    # Tencent Polaris
 │   ├── servicecomb/                # Apache ServiceComb
-│   └── zookeeper/                  # Apache ZooKeeper
-│
-├── log/                            # ログインターフェースとアダプタ
-│   ├── slog_logger.go              # 標準ライブラリ slog アダプタ（デフォルト実装）
-│   ├── level_filter.go             # レベルフィルタ
-│   ├── multi_logger.go             # マルチロガー
-│   ├── go.mod
-│   ├── aliyun/                     # Alibaba Cloud SLS
-│   ├── fluent/                     # Fluentd
-│   ├── logrus/                     # sirupsen/logrus
-│   ├── tencent/                    # Tencent Cloud CLS
-│   ├── zap/                        # uber-go/zap
-│   └── zerolog/                    # rs/zerolog
-│
+│   ├── zookeeper/                  # Apache ZooKeeper
+│   ├── registrar.go                # Registrar インターフェース
+│   └── discovery.go                # Discovery / Watcher インターフェース
+├── retry/                          # リトライポリシー
+├── security/                       # セキュリティモジュール
+│   ├── authn/                      # 認証（JWT/OAuth2/OIDC）
+│   ├── authz/                      # 認可（Casbin）
+│   └── crypto/                     # 暗号化・復号
+├── tracer/                         # 分散トレーシングプラグイン
+│   └── otlp/                       # OpenTelemetry Protocol (OTLP) 実装
+│       └── otlp.go                 # ネイティブ *sdktrace.TracerProvider を返す
 ├── transport/                      # トランスポート層インターフェースとドライバ
 │   ├── http/                       # HTTP Server + Driver インターフェース + デフォルトドライバ
 │   │   ├── server.go               # Server 実装（ルーティング/ミドルウェア/TLS）
-│   │   ├── default_server.go       # 標準ライブラリベースのデフォルトドライバ
+│   │   └── options.go              # 設定オプション
+│   ├── http3/                      # HTTP/3 (QUIC)
+│   ├── grpc/                       # gRPC Server
+│   ├── websocket/                  # WebSocket
+│   ├── socketio/                   # Socket.IO
+│   ├── signalr/                    # SignalR
+│   ├── sse/                        # Server-Sent Events
+│   ├── tcp/                        # TCP Socket
+│   ├── kcp/                        # KCP (UDP)
+│   ├── webrtc/                     # WebRTC SFU
+│   ├── webtransport/               # WebTransport
+│   ├── graphql/                    # GraphQL
+│   ├── thrift/                     # Apache Thrift
+│   ├── trpc/                       # tRPC
+│   ├── cron/                       # Cron 定時タスク
+│   ├── hptimer/                    # 高精度タイマー
+│   ├── asynq/                      # Asynq 非同期タスクキュー
+│   ├── machinery/                  # Machinery（Celery 系）
+│   └── mcp/                        # Model Context Protocol
+├── workflow/                       # ワークフローエンジンプラグイン（Client/Worker 共通インターフェース定義）
+│   ├── argo/                       # Argo Workflows（REST API）
+│   │   ├── client.go               # 送信/取得/一時停止/再開/終了
+│   │   ├── options.go              # 設定オプション + Argo 型定義
+│   │   └── logger.go               # slog ログラッパー
+│   ├── conductor/                  # Netflix Conductor（conductor-go SDK）
+│   │   ├── client.go               # 開始/取得/一時停止/再開/終了
+│   │   ├── worker.go               # Task Worker
 │   │   ├── options.go              # 設定オプション
-│   │   ├── gin/                    # Gin ドライバ
-│   │   └── fiber/                  # Fiber ドライバ
-│   └── grpc/                       # gRPC Server
-│
-├── tracer/                         # 分散トレーシングプラグイン
-│   ├── tracer.go                   # パッケージドキュメント
-│   ├── go.mod
-│   └── otlp/                       # OpenTelemetry Protocol (OTLP) 実装
-│       ├── otlp.go                 # ネイティブ *sdktrace.TracerProvider を返す
-│       └── go.mod
-│
-├── metrics/                        # メトリクスインターフェースとプラグイン
-│   ├── metrics.go                  # Metrics インターフェース定義（Counter/Histogram/Gauge）
-│   ├── doc.go                      # パッケージドキュメント
-│   ├── go.mod
-│   ├── prometheus/                 # Prometheus client_golang 実装
-│   │   ├── prometheus.go           # Prometheus provider 実装
-│   │   └── go.mod
-│   ├── otel/                       # OpenTelemetry OTLP 実装
-│   │   ├── otel.go                 # OTLP metric exporter 設定
-│   │   └── go.mod
-│   └── datadog/                    # Datadog DogStatsD 実装
-│       ├── datadog.go              # DogStatsD provider 実装
-│       └── go.mod
-│
-├── ai/                             # AI / LLM プラグイン（独立した自己完結モジュール）
-│   ├── openai/                     # OpenAI 互換クライアント（sashabaranov/go-openai）
-│   │   ├── client.go               # *openai.Client を返す
-│   │   ├── config.go               # ローカル Config 型
-│   │   ├── options.go              # HTTP クライアントオプション
-│   │   └── go.mod
-│   ├── eino/                       # ByteDance Eino フレームワーク（cloudwego/eino）
-│   │   ├── client.go               # model.ChatModel を返す
-│   │   ├── config.go               # ローカル Config 型
-│   │   ├── compose.go              # Chain/Graph/Workflow ヘルパー
-│   │   ├── chain.go                # Chain ノード追加メソッド
-│   │   ├── prompt.go               # ChatTemplate ヘルパー
-│   │   ├── tool.go                 # Tool ノードヘルパー
-│   │   ├── options.go              # ChatModel 設定モディファイア
-│   │   └── go.mod
-│   └── langchaingo/                # LangChainGo（tmc/langchaingo）
-│       ├── client.go               # llms.Model を返す
-│       ├── config.go               # ローカル Config 型
-│       ├── agent.go                # Agent / Executor ヘルパー
-│       ├── chain.go                # Chain ヘルパー
-│       ├── memory.go               # Memory ヘルパー
-│       ├── embedding.go            # Embedding ヘルパー
-│       ├── vectorstore.go          # VectorStore ヘルパー
-│       ├── options.go              # OpenAI/Ollama/HTTP オプション
-│       └── go.mod
-│
-├── workflow/                      # ワークフローエンジンプラグイン（Client/Worker 共通インターフェース定義）
-│   ├── workflow.go                # 共通インターフェース（Client/Worker）
-│   ├── go.mod
-│   ├── argo/                      # Argo Workflows（REST API）
-│   │   ├── client.go              # 送信/取得/一時停止/再開/終了
-│   │   ├── options.go             # 設定オプション + Argo 型定義
-│   │   ├── logger.go              # slog ログラッパー
-│   │   └── go.mod
-│   ├── conductor/                 # Netflix Conductor（conductor-go SDK）
-│   │   ├── client.go              # 開始/取得/一時停止/再開/終了
-│   │   ├── worker.go              # Task Worker
-│   │   ├── options.go             # 設定オプション
-│   │   ├── logger.go
-│   │   └── go.mod
-│   ├── goworkflows/               # cschleiden/go-workflows
-│   │   ├── client.go              # 作成/キャンセル/シグナル/待機
-│   │   ├── worker.go              # Workflow + Activity Worker
-│   │   ├── options.go             # Worker オプション
-│   │   ├── logger.go
-│   │   └── go.mod
-│   └── temporal/                  # Temporal（temporal.io/sdk）
-│       ├── client.go              # 実行/シグナル/クエリ/キャンセル（ネイティブ OTel トレーシング）
-│       ├── worker.go              # Worker + 組み込みメッセージ処理 Activity
-│       ├── workflow.go            # 組み込み BrokerMessageWorkflow
-│       ├── options.go             # 設定オプション
-│       ├── logger.go
-│       └── go.mod
-│
-├── encoding/                      # エンコーディングインターフェースとプラグイン
-│   ├── encoding.go                # Codec インターフェース定義 + レジストリ
-│   ├── go.mod
-│   ├── json/                      # JSON コーデック（encoding/json）
-│   │   ├── json.go
-│   │   └── go.mod
-│   ├── proto/                     # Protobuf コーデック（google.golang.org/protobuf）
-│   │   ├── proto.go
-│   │   └── go.mod
-│   └── yaml/                      # YAML コーデック（gopkg.in/yaml.v3）
-│       ├── yaml.go
-│       └── go.mod
-│
-├── oss/                           # オブジェクトストレージプラグイン（自己完結型設定）
-│   ├── minio/                     # MinIO（minio/minio-go）
-│   │   ├── client.go              # *minio.Client を返す
-│   │   ├── config.go              # ローカル Config 型
-│   │   └── go.mod
-│   └── s3/                        # AWS S3 互換（aws-sdk-go-v2）
-│       ├── client.go              # *s3.Client を返す
-│       ├── storage.go             # Storage ラッパー（デフォルト bucket）
-│       ├── config.go              # ローカル Config 型
-│       ├── errors.go              # センチネルエラー
-│       └── go.mod
-│
+│   │   └── logger.go
+│   ├── goworkflows/                # cschleiden/go-workflows
+│   │   ├── client.go               # 作成/キャンセル/シグナル/待機
+│   │   ├── worker.go               # Workflow + Activity Worker
+│   │   ├── options.go              # Worker オプション
+│   │   └── logger.go
+│   ├── temporal/                   # Temporal（temporal.io/sdk）
+│   │   ├── client.go               # 実行/シグナル/クエリ/キャンセル（ネイティブ OTel トレーシング）
+│   │   ├── worker.go               # Worker + 組み込みメッセージ処理 Activity
+│   │   ├── workflow.go             # 組み込み BrokerMessageWorkflow
+│   │   ├── options.go              # 設定オプション
+│   │   └── logger.go
+│   └── workflow.go                 # 共通インターフェース（Client/Worker）
 ├── go.work                         # Go Workspace マルチモジュール管理
 ├── LICENSE
 └── README.md
@@ -639,6 +834,95 @@ func main() {
 }
 ```
 
+### Swagger UI ドキュメント
+
+HTTP サーバーに組み込みの Swagger UI をマウントします。リモート URL、ローカルファイル、メモリ内データの 3 種類のドキュメントソースをサポートします。
+
+```go
+package main
+
+import (
+    "context"
+
+    httpServer "github.com/tx7do/go-wind-plugins/transport/http"
+    "github.com/tx7do/go-wind-plugins/transport/http/driver/std"
+    "github.com/tx7do/go-wind-plugins/transport/http/swagger"
+)
+
+func main() {
+    srv := httpServer.NewServer(":8080",
+        httpServer.WithDriver(std.NewDriver()),
+    )
+
+    // 方式 1：リモート URL。フロントエンドが openapi.json を直接取得
+    swagger.Register(srv,
+        swagger.WithTitle("Petstore"),
+        swagger.WithRemoteFileURL("https://petstore3.swagger.io/api/v3/openapi.json"),
+        swagger.WithBasePath("/docs/"),
+    )
+
+    // 方式 2：ローカルファイル。サーバーが読み込んでホスト
+    // swagger.Register(srv,
+    //     swagger.WithTitle("API"),
+    //     swagger.WithLocalFile("./openapi.json"),
+    //     swagger.WithBasePath("/docs/"),
+    // )
+
+    // 方式 3：メモリ内データ。動的に生成されたドキュメントをホスト
+    // data := generateOpenAPI()
+    // swagger.Register(srv,
+    //     swagger.WithTitle("API"),
+    //     swagger.WithMemoryData(data, "json"),
+    //     swagger.WithBasePath("/docs/"),
+    // )
+
+    srv.Start(context.Background())
+}
+```
+
+`http://localhost:8080/docs/` にアクセスすると、インタラクティブな API ドキュメントが表示されます。
+
+### ReDoc ドキュメント
+
+代替ドキュメントレンダリングエンジン ReDoc。同様にリモート URL とローカルファイルの 2 種類のドキュメントソースをサポートします。
+
+```go
+package main
+
+import (
+    "context"
+
+    httpServer "github.com/tx7do/go-wind-plugins/transport/http"
+    "github.com/tx7do/go-wind-plugins/transport/http/driver/std"
+    "github.com/tx7do/go-wind-plugins/transport/http/redoc"
+)
+
+func main() {
+    srv := httpServer.NewServer(":8080",
+        httpServer.WithDriver(std.NewDriver()),
+    )
+
+    // リモート URL モード
+    redoc.Register(srv,
+        redoc.WithTitle("Petstore"),
+        redoc.WithDescription("A sample API powered by ReDoc"),
+        redoc.WithRemoteFileURL("https://petstore3.swagger.io/api/v3/openapi.json"),
+        redoc.WithBasePath("/redoc/"),
+    )
+
+    // ローカルファイルモード
+    // redoc.Register(srv,
+    //     redoc.WithTitle("Petstore"),
+    //     redoc.WithLocalFile("./openapi.json"),
+    //     redoc.WithBasePath("/redoc/"),
+    // )
+
+    srv.Start(context.Background())
+}
+```
+
+`http://localhost:8080/redoc/` にアクセスすると、ReDoc がレンダリングしたインタラクティブなドキュメントが表示されます。
+
 ### ログ例（Zap）
 
 ```go
@@ -766,6 +1050,7 @@ import (
 )
 
 func main() {
+    // Kafka ブローカーを作成
     b := kafkaBroker.NewBroker(
         broker.WithAddress("localhost:9092"),
         broker.WithCodec("json"),
@@ -779,6 +1064,7 @@ func main() {
     }
     defer b.Disconnect()
 
+    // パブリッシュ
     ctx := context.Background()
     msg := map[string]any{"temperature": 25.5, "humidity": 60.0}
     err := b.Publish(ctx, "sensor.temperature",
@@ -791,6 +1077,7 @@ func main() {
     }
     fmt.Println("message published")
 
+    // サブスクライブ
     _, err = b.Subscribe("sensor.temperature",
         func(ctx context.Context, event broker.Event) error {
             slog.Info("received",
@@ -805,7 +1092,7 @@ func main() {
         panic(err)
     }
 
-    select {}
+    select {} // ブロックしてメッセージを待機
 }
 ```
 
@@ -849,7 +1136,6 @@ func main() {
 ```
 
 ---
-
 ## 設計理念
 
 ### レゴスタイルの組み合わせ
