@@ -1372,4 +1372,4 @@ srv := graphqlServer.NewServer(":8080")
 
 ---
 
-> **下一步学习**：尝试运行 `_examples/graphql-basic` 目录下的示例代码，动手实践是掌握这些概念的最佳方式！
+> **下一步学习**：阅读 `transport/graphql` 包的 godoc 示例（源码 `example_test.go`），动手实践是掌握这些概念的最佳方式！

@@ -1049,4 +1049,4 @@ srv.GET("/api/private", func(w http.ResponseWriter, r *http.Request) {
 
 ---
 
-> **下一步学习**：尝试运行 `_examples/http-basic` 和 `_examples/http-middleware` 目录下的示例代码，动手实践是掌握这些概念的最佳方式！
+> **下一步学习**：阅读 `transport/http`、`transport/http/driver/std` 与 `transport/http/middleware/*` 包的 godoc 示例（源码 `example_test.go`），动手实践是掌握这些概念的最佳方式！

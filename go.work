@@ -204,7 +204,4 @@ use (
 	./workflow/conductor
 	./workflow/goworkflows
 	./workflow/temporal
-
-	// --- Examples (underscore prefix: excluded from go build ./...) ---
-	./_examples
 )
