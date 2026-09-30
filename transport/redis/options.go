@@ -26,6 +26,7 @@ func WithAddress(addr string) ServerOption {
 }
 
 // WithTLSConfig TLS配置
+// WithTLSConfig 注意：对应 broker 驱动当前不消费 TLS 配置，透传不生效。
 func WithTLSConfig(c *tls.Config) ServerOption {
 	return func(s *Server) {
 		if c != nil {
@@ -81,6 +82,13 @@ func WithMaxIdle(n int) ServerOption {
 func WithMaxActive(n int) ServerOption {
 	return func(s *Server) {
 		s.brokerOpts = append(s.brokerOpts, redis.WithMaxActive(n))
+	}
+}
+
+// WithPassword 设置密码
+func WithPassword(password string) ServerOption {
+	return func(s *Server) {
+		s.brokerOpts = append(s.brokerOpts, redis.WithPassword(password))
 	}
 }
 

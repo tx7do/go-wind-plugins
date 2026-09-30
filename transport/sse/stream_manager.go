@@ -55,9 +55,13 @@ func (s *StreamManager) Exist(streamId StreamID) bool {
 // Range iterates over all streams.
 func (s *StreamManager) Range(fn func(*Stream)) {
 	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
+	streams := make([]*Stream, 0, len(s.streams))
 	for _, v := range s.streams {
+		streams = append(streams, v)
+	}
+	s.mtx.Unlock()
+
+	for _, v := range streams {
 		fn(v)
 	}
 }
@@ -67,11 +71,13 @@ func (s *StreamManager) Add(stream *Stream) {
 	if stream == nil {
 		return
 	}
-	if s.Exist(stream.StreamID()) {
-		return
-	}
+
+	// Exist 检查与写入合并进同一临界区，消除 TOCTOU（双写覆盖 → 孤儿流泄漏）
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+	if _, ok := s.streams[stream.StreamID()]; ok {
+		return
+	}
 	s.streams[stream.StreamID()] = stream
 }
 

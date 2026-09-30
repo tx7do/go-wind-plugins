@@ -3,6 +3,8 @@ package redis
 import (
 	"time"
 
+	"github.com/tx7do/go-wind/log"
+
 	"github.com/tx7do/go-wind-plugins/broker"
 	"github.com/tx7do/go-wind-plugins/broker/redis/option"
 )
@@ -45,6 +47,11 @@ func WithMaxActive(n int) broker.Option {
 	return option.WithMaxActive(n)
 }
 
+// WithPassword 设置密码
+func WithPassword(password string) broker.Option {
+	return option.WithPassword(password)
+}
+
 // WithDefaultOptions 全部置为默认的配置
 func WithDefaultOptions() broker.Option {
 	return option.WithDefaultOptions()
@@ -53,6 +60,11 @@ func WithDefaultOptions() broker.Option {
 ///
 /// logger 转发
 ///
+
+// SetLogger 注入库内部日志使用的 logger
+func SetLogger(l log.Logger) {
+	option.SetLogger(l)
+}
 
 func LogDebug(args ...any) {
 	option.LogDebug(args...)

@@ -101,10 +101,10 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
-	log.Println("[cron] scheduler starting...")
+	LogInfof("scheduler starting...")
 	s.cronScheduler.Start()
 	s.started.Store(true)
-	log.Printf("[cron] scheduler started, %d job(s) registered", s.GetJobCount())
+	LogInfof("scheduler started, %d job(s) registered", s.GetJobCount())
 
 	// 阻塞等待 ctx 取消
 	<-ctx.Done()
@@ -135,7 +135,7 @@ func (s *Server) stopInternal(ctx context.Context) error {
 		s.stopping.Store(false)
 	}()
 
-	log.Println("[cron] scheduler stopping...")
+	LogInfof("scheduler stopping...")
 
 	stopCh := make(chan struct{})
 	go func() {
@@ -147,9 +147,9 @@ func (s *Server) stopInternal(ctx context.Context) error {
 
 	select {
 	case <-stopCh:
-		log.Println("[cron] all jobs stopped gracefully")
+		LogInfof("all jobs stopped gracefully")
 	case <-ctx.Done():
-		log.Println("[cron] shutdown timeout, force stopped")
+		LogWarnf("shutdown timeout, force stopped")
 	}
 
 	return nil
@@ -180,7 +180,7 @@ func (s *Server) NewTimerJob(spec string, cmd func()) (cron.EntryID, error) {
 	}
 
 	s.entryIDs.Store(entryID, spec)
-	log.Printf("[cron] job added: id=%d, spec=%s", entryID, spec)
+	LogInfof("job added: id=%d, spec=%s", entryID, spec)
 	return entryID, nil
 }
 
@@ -191,7 +191,7 @@ func (s *Server) RemoveTimerJob(entryID cron.EntryID) {
 
 	s.cronScheduler.Remove(entryID)
 	if spec, ok := s.entryIDs.LoadAndDelete(entryID); ok {
-		log.Printf("[cron] job removed: id=%d, spec=%s", entryID, spec)
+		LogInfof("job removed: id=%d, spec=%s", entryID, spec)
 	}
 }
 
@@ -210,7 +210,7 @@ func (s *Server) RemoveAllJobs() {
 	})
 
 	s.entryIDs = sync.Map{}
-	log.Printf("[cron] all jobs removed, total: %d", count)
+	LogInfof("all jobs removed, total: %d", count)
 }
 
 // GetJobCount 获取当前注册的任务数量。

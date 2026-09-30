@@ -66,6 +66,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
+
 	if s.err = s.Init(); s.err != nil {
 		LogErrorf("init broker failed: [%s]", s.err.Error())
 		return s.err
@@ -78,32 +79,48 @@ func (s *Server) Start(ctx context.Context) error {
 
 	LogInfof("server listening on: %s", s.Address())
 
+	// Connect 成功后才置 started：
+	// 避免连接失败路径上遗留半启动状态。
+	// 先置位再注册订阅：与 Stop 的交接由 doRegisterSubscriber 的 started 复查处理。
+	s.started.Store(true)
+
+
 	if s.err = s.doRegisterSubscriberMap(); s.err != nil {
 		return s.err
 	}
 
 	s.baseCtx = ctx
-	s.started.Store(true)
 
 	return nil
 }
 
 func (s *Server) Stop(ctx context.Context) error {
-	if s.started.Load() == false {
+	if !s.started.Load() {
+		// 允许 Start 失败后重试：清掉残留的错误状态
+		s.err = nil
 		return nil
 	}
 
 	LogInfo("server stopping...")
 
-	for _, v := range s.subscribers {
+	s.started.Store(false)
+
+	// 持锁快照订阅表，避免与并发的 RegisterSubscriber 竞争
+	s.Lock()
+	subs := s.subscribers
+	s.subscribers = make(broker.SubscriberMap)
+	s.Unlock()
+
+	for _, v := range subs {
 		_ = v.Unsubscribe(false)
 	}
-	s.subscribers = make(broker.SubscriberMap)
-	s.subscriberOpts = make(transport.SubscribeOptionMap)
 
-	s.started.Store(false)
+	// 保留 subscriberOpts（含启动后的注册参数，见 doRegisterSubscriber），
+	// 下一次 Start 会通过 doRegisterSubscriberMap 重新注册全部订阅
+
 	err := s.Disconnect()
 	s.err = nil
+
 
 	LogInfo("server stopped.")
 
@@ -117,8 +134,6 @@ func (s *Server) Stop(ctx context.Context) error {
 // @param handler 订阅者的处理函数
 func (s *Server) RegisterSubscriber(ctx context.Context, topic, queue string, disableAutoAck bool, handler broker.Handler, binder broker.Binder, opts ...broker.SubscribeOption) error {
 	s.Lock()
-	defer s.Unlock()
-
 	//var subscribeOptions []broker.SubscribeOption
 	opts = append(opts, broker.WithSubscribeQueueName(queue))
 	if disableAutoAck {
@@ -127,13 +142,16 @@ func (s *Server) RegisterSubscriber(ctx context.Context, topic, queue string, di
 
 	// context必须要插入到头部，否则后续传入的配置会被覆盖掉。
 	opts = append([]broker.SubscribeOption{broker.WithSubscribeContext(ctx)}, opts...)
-
-	if s.started.Load() {
-		return s.doRegisterSubscriber(topic, handler, binder, opts...)
-	} else {
+	started := s.started.Load()
+	if !started {
 		s.subscriberOpts[topic] = &transport.SubscribeOption{Handler: handler, Binder: binder, SubscribeOptions: opts}
+		s.Unlock()
+		return nil
 	}
-	return nil
+	s.Unlock()
+
+	// 订阅动作放在锁外执行，避免 broker 阻塞拖住整个注册面
+	return s.doRegisterSubscriber(topic, handler, binder, opts...)
 }
 
 func RegisterSubscriber[T any](
@@ -149,13 +167,30 @@ func RegisterSubscriber[T any](
 		queue,
 		disableAutoAck,
 		func(ctx context.Context, event broker.Event) error {
+			if event == nil || event.Message() == nil || event.Message().Body == nil {
+				return fmt.Errorf("event or message body is nil")
+			}
+
+			var zero T
+			expectedType := fmt.Sprintf("%T", &zero)
+
 			switch t := event.Message().Body.(type) {
 			case *T:
 				if err := handler(ctx, event.Topic(), event.Message().Headers, t); err != nil {
 					return err
 				}
+			case T:
+				if err := handler(ctx, event.Topic(), event.Message().Headers, &t); err != nil {
+					return err
+				}
 			default:
-				return fmt.Errorf("unsupported type: %T", t)
+				return fmt.Errorf("unsupported type: expected %s, got %T", expectedType, event.Message().Body)
+			}
+
+			// 手动 ack 模式（disableAutoAck）：typed handler 拿不到 Event，
+			// 约定为处理成功即提交 offset；失败不提交，等重投
+			if disableAutoAck {
+				return event.Ack()
 			}
 			return nil
 		},
@@ -175,22 +210,51 @@ func (s *Server) doRegisterSubscriber(topic string, handler broker.Handler, bind
 		return err
 	}
 
-	if _, exists := s.subscribers[topic]; exists {
-		LogWarnf("subscriber for topic '%s' already exists, overwriting", topic)
+	var old broker.Subscriber
+	exists := false
+	started := false
+
+	s.Lock()
+	started = s.started.Load()
+	if started {
+		old, exists = s.subscribers[topic]
+		s.subscribers[topic] = sub
 	}
-	s.subscribers[topic] = sub
+	// 记录注册参数：Stop 后保留在缓存表中，Start→Stop→Start 时重新注册
+	s.subscriberOpts[topic] = &transport.SubscribeOption{Handler: handler, Binder: binder, SubscribeOptions: opts}
+	s.Unlock()
+
+	if !started {
+		// 与 Stop 竞态：服务已停止，新建的订阅立即退订，等待下次 Start 重新注册
+		LogWarnf("server stopped, subscription for '%s' deferred to next start", topic)
+		_ = sub.Unsubscribe(false)
+		return nil
+	}
+
+	if exists {
+		// 旧订阅先退订，避免旧订阅继续消费造成泄漏
+		LogWarnf("subscriber for '%s' already exists, unsubscribing the old one", topic)
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogErrorf("unsubscribe old subscriber for '%s' failed: %s", topic, uerr.Error())
+		}
+	}
 	return nil
 }
 
 func (s *Server) doRegisterSubscriberMap() error {
+	// 持锁取出并清空缓存表，避免与并发的 RegisterSubscriber 竞争
+	s.Lock()
+	optsMap := s.subscriberOpts
+	s.subscriberOpts = make(transport.SubscribeOptionMap)
+	s.Unlock()
+
 	var errs []error
-	for topic, opt := range s.subscriberOpts {
+	for topic, opt := range optsMap {
 		if err := s.doRegisterSubscriber(topic, opt.Handler, opt.Binder, opt.SubscribeOptions...); err != nil {
 			LogErrorf("register subscriber failed, topic: %s, error: %s", topic, err.Error())
 			errs = append(errs, err)
 		}
 	}
-	s.subscriberOpts = make(transport.SubscribeOptionMap)
 	return errors.Join(errs...)
 }
 

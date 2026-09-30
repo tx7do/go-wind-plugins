@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -28,6 +29,10 @@ type azureBroker struct {
 
 func NewBroker(opts ...broker.Option) broker.Broker {
 	options := broker.NewOptionsAndApply(opts...)
+
+	if l := broker.LoggerFromOptions(&options); l != nil {
+		SetLogger(l)
+	}
 
 	b := &azureBroker{
 		options:     options,
@@ -114,7 +119,7 @@ func (b *azureBroker) Disconnect() error {
 }
 
 func (b *azureBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
-	return nil, errors.New("not implemented")
+	return broker.GenericRequest(ctx, b, topic, msg, opts...)
 }
 
 func (b *azureBroker) Publish(ctx context.Context, topic string, msg *broker.Message, opts ...broker.PublishOption) error {
@@ -260,6 +265,12 @@ func (b *azureBroker) Subscribe(topic string, handler broker.Handler, binder bro
 
 	go b.receive(subCtx, receiver, handler, binder, options, sub)
 
+	if old := b.subscribers.Get(topic); old != nil {
+		// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
+		}
+	}
 	b.subscribers.Add(topic, sub)
 
 	return sub, nil
@@ -287,6 +298,12 @@ func (b *azureBroker) receive(ctx context.Context, receiver *azservicebus.Receiv
 				return
 			}
 			LogErrorf("receive messages error: %v", err)
+			// 持续性错误（实体删除/配额等）下退避，避免热循环打服务
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 
@@ -318,6 +335,10 @@ func (b *azureBroker) processMessage(ctx context.Context, receiver *azservicebus
 			m.Body = binder()
 			if err := broker.Unmarshal(b.options.Codec, sbMsg.Body, &m.Body); err != nil {
 				LogErrorf("unmarshal message failed: %v", err)
+				if eh := b.options.ErrorHandler; eh != nil {
+					p := &publication{topic: sub.topic, msg: &m, sbMsg: sbMsg, receiver: receiver, err: err}
+					_ = eh(ctx, p)
+				}
 				_ = receiver.AbandonMessage(ctx, sbMsg, nil)
 				return
 			}
@@ -336,6 +357,9 @@ func (b *azureBroker) processMessage(ctx context.Context, receiver *azservicebus
 	if err := handler(ctx, p); err != nil {
 		p.err = err
 		LogErrorf("handle message failed: %v", err)
+		if eh := b.options.ErrorHandler; eh != nil {
+			_ = eh(ctx, p)
+		}
 		_ = receiver.AbandonMessage(ctx, sbMsg, nil)
 		return
 	}

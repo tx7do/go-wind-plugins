@@ -23,7 +23,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 
@@ -88,6 +87,13 @@ func (s *Server) Use(middlewares ...Middleware) {
 
 // Start 启动 GraphQL 服务器，阻塞直到 ctx 被取消。
 func (s *Server) Start(ctx context.Context) error {
+	// Start 前先释放遗留的 listener，以获得干净的监听
+	// （避免同一 listener 叠两个 accept 循环，或残留已关闭的 fd）
+	if s.listener != nil {
+		_ = s.listener.Close()
+		s.listener = nil
+	}
+
 	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return err
@@ -106,7 +112,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.server = &http.Server{Handler: h}
 	s.server.BaseContext = func(net.Listener) context.Context { return ctx }
 
-	fmt.Printf("[%s] server listening on: %s\n", KindGraphQL, ln.Addr().String())
+	LogInfof("server listening on: %s", ln.Addr().String())
 
 	errChan := make(chan error, 1)
 	go func() {
@@ -130,6 +136,10 @@ func (s *Server) Stop(ctx context.Context) error {
 	if s.server == nil {
 		return nil
 	}
+
+	// Shutdown 会关闭并使 http.Server 不可复用：释放 listener 引用，
+	// 下次 Start 会重建 server 实例与 listener（支持 Stop→Start）
+	s.listener = nil
 	return s.server.Shutdown(ctx)
 }
 

@@ -1,9 +1,9 @@
 package tcp
 
 import (
-	"log"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/tx7do/go-utils/id"
 )
@@ -20,6 +20,10 @@ type Session struct {
 	hooks SessionHooks
 
 	send chan []byte
+
+	// idleTimeout 单次读/写操作的超时；0 表示不设置（默认）。
+	// 由 Server 的 WithTimeout 接线，用于回收半开连接与卡死的对端
+	idleTimeout time.Duration
 
 	connMu     sync.RWMutex
 	done       chan struct{}
@@ -66,6 +70,9 @@ func (s *Session) SendMessage(message []byte) {
 	case <-s.done:
 		return
 	case s.send <- message:
+	case <-time.After(5 * time.Second):
+		// 慢消费者（writePump 阻塞）不能无限拖住调用方/广播方
+		LogErrorf("session %s send buffer full, message dropped", s.SessionID())
 	}
 }
 
@@ -101,7 +108,7 @@ func (s *Session) closeConnect() {
 
 	if conn != nil {
 		if err := conn.Close(); err != nil {
-			log.Printf("[tcp] disconnect error: %s", err)
+			LogErrorf("disconnect error: %s", err.Error())
 		}
 	}
 }
@@ -120,13 +127,18 @@ func (s *Session) writePump() {
 			if conn == nil {
 				return
 			}
-			if _, err := conn.Write(msg); err != nil {
+			if s.idleTimeout > 0 {
+				_ = conn.SetWriteDeadline(time.Now().Add(s.idleTimeout))
+			}
+
+			// 写入带长度前缀的帧，保证对端能正确分包
+			if err := WriteFrame(conn, msg); err != nil {
 				select {
 				case <-s.done:
 					return
 				default:
 				}
-				log.Printf("[tcp] write message error: %v", err)
+				LogError("write message error: ", err)
 				return
 			}
 		}
@@ -136,8 +148,6 @@ func (s *Session) writePump() {
 func (s *Session) readPump() {
 	defer s.wg.Done()
 	defer s.Close()
-
-	buf := make([]byte, recvBufferSize)
 
 	for {
 		select {
@@ -151,14 +161,20 @@ func (s *Session) readPump() {
 			return
 		}
 
-		readLen, err := conn.Read(buf)
+		if s.idleTimeout > 0 {
+			// 空闲超时：超时未收到任何字节即断开，回收半开连接
+			_ = conn.SetReadDeadline(time.Now().Add(s.idleTimeout))
+		}
+
+		// 按帧读取，解决 TCP 粘包/拆包问题
+		frame, err := ReadFrame(conn)
 		if err != nil {
 			select {
 			case <-s.done:
 				return
 			default:
 			}
-			log.Printf("[tcp] read message error: %v", err)
+			LogErrorf("read message error: %v", err)
 			return
 		}
 
@@ -166,8 +182,8 @@ func (s *Session) readPump() {
 			continue
 		}
 
-		if err = s.hooks.handleSocketRawData(s.SessionID(), buf[:readLen]); err != nil {
-			log.Printf("[tcp] process message error: %v", err)
+		if err = s.hooks.handleSocketRawData(s.SessionID(), frame); err != nil {
+			LogErrorf("process message error: %v", err)
 		}
 	}
 }

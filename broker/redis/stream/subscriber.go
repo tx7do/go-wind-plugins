@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -35,6 +36,13 @@ func (s *subscriber) onMessage(msgID string, data []byte) error {
 		m.Body = s.binder()
 
 		if err := broker.Unmarshal(s.b.options.Codec, data, &m.Body); err != nil {
+			// 毒消息：通知 ErrorHandler（消息滞留 PEL，等待人工/后续恢复机制处理）
+			redisOption.LogErrorf("unmarshal message failed: %v", err)
+			if eh := s.b.options.ErrorHandler; eh != nil {
+				mm := broker.Message{Body: nil}
+				p := publication{topic: s.topic, message: &mm, err: err}
+				_ = eh(s.options.Context, &p)
+			}
 			return err
 		}
 	} else {
@@ -50,6 +58,9 @@ func (s *subscriber) onMessage(msgID string, data []byte) error {
 	}
 
 	if p.err = s.handler(s.options.Context, &p); p.err != nil {
+		if eh := s.b.options.ErrorHandler; eh != nil {
+			_ = eh(s.options.Context, &p)
+		}
 		return p.err
 	}
 
@@ -86,8 +97,10 @@ func (s *subscriber) recv() {
 		}
 
 		// 重连后确保消费组存在
-		if reErr := s.b.ensureGroup(s.topic, s.group); reErr != nil {
-			redisOption.LogWarnf("re-ensure group: %v", reErr)
+		if s.b.pool != nil {
+			if reErr := s.b.ensureGroup(s.topic, s.group); reErr != nil {
+				redisOption.LogWarnf("re-ensure group: %v", reErr)
+			}
 		}
 
 		if reconnectDelay < maxReconnectDelay {
@@ -98,6 +111,10 @@ func (s *subscriber) recv() {
 
 // receiveLoop 使用 XREADGROUP 持续消费消息
 func (s *subscriber) receiveLoop() error {
+	// 周期性认领消费组 PEL 中滞留的消息（其他消费者/上次进程崩溃遗留）
+	lastClaim := time.Now()
+	const claimInterval = 30 * time.Second
+
 	for {
 		if s.IsClosed() {
 			return nil
@@ -109,7 +126,16 @@ func (s *subscriber) receiveLoop() error {
 		default:
 		}
 
+		// 定时认领 PEL 中闲置超过 minIdle 的消息并重新消费
+		if time.Since(lastClaim) >= claimInterval {
+			lastClaim = time.Now()
+			s.claimPending()
+		}
+
 		// XREADGROUP GROUP group consumer BLOCK timeout COUNT count STREAMS stream >
+		if s.b.pool == nil {
+			return errors.New("redis-stream: broker disconnected")
+		}
 		conn := s.b.pool.Get()
 
 		reply, err := conn.Do("XREADGROUP",
@@ -189,6 +215,67 @@ func (s *subscriber) extractField(fields []any, key string) any {
 		}
 	}
 	return nil
+}
+
+// claimPending 认领消费组 PEL 中闲置超过 minIdle 的消息并重新消费。
+// 场景：上次进程崩溃后未 XACK 的消息、其他离线消费者遗留的消息。
+// 使用 XAUTOCLAIM（Redis 6.2+）；失败仅记日志，不影响主消费循环。
+func (s *subscriber) claimPending() {
+	if s.b.pool == nil {
+		return
+	}
+
+	const minIdleMs = 60_000 // 闲置 60s 以上才认领，避免与正常处理中的消费者争抢
+
+	conn := s.b.pool.Get()
+	defer func() { _ = conn.Close() }()
+
+	reply, err := conn.Do("XAUTOCLAIM",
+		s.topic, s.group, s.consumer,
+		minIdleMs, "0-0", "COUNT", s.count,
+	)
+	if err != nil {
+		redisOption.LogWarnf("XAUTOCLAIM failed [stream=%s group=%s]: %v", s.topic, s.group, err)
+		return
+	}
+
+	// reply 格式: [next-cursor, [[id, [field, value, ...]], ...], (可选)deleted-ids]
+	replySlice, ok := reply.([]any)
+	if !ok || len(replySlice) < 2 {
+		return
+	}
+
+	messages, ok := replySlice[1].([]any)
+	if !ok || len(messages) == 0 {
+		return
+	}
+
+	redisOption.LogInfof("claimed %d pending messages [stream=%s group=%s]", len(messages), s.topic, s.group)
+
+	for _, msgEntry := range messages {
+		if s.IsClosed() {
+			return
+		}
+
+		msgData, ok := msgEntry.([]any)
+		if !ok || len(msgData) < 2 {
+			continue
+		}
+
+		msgID, _ := msgData[0].(string)
+		fields, _ := msgData[1].([]any)
+
+		body := s.extractField(fields, "body")
+		if body == nil {
+			continue
+		}
+
+		if data, ok := body.([]byte); ok {
+			if err := s.onMessage(msgID, data); err != nil {
+				redisOption.LogErrorf("claimed onMessage error [stream=%s id=%s]: %s", s.topic, msgID, err.Error())
+			}
+		}
+	}
 }
 
 func (s *subscriber) Options() broker.SubscribeOptions {

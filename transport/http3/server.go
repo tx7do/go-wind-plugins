@@ -10,6 +10,7 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -37,6 +38,9 @@ type Server struct {
 
 	router      *mux.Router
 	strictSlash bool
+
+	stopped     atomic.Bool
+	everStarted atomic.Bool
 }
 
 func NewServer(opts ...ServerOption) *Server {
@@ -68,8 +72,9 @@ func (s *Server) init(opts ...ServerOption) {
 	s.Server.TLSConfig = s.tlsConf
 
 	s.router = mux.NewRouter().StrictSlash(s.strictSlash)
-	s.router.NotFoundHandler = http.DefaultServeMux
-	s.router.MethodNotAllowedHandler = http.DefaultServeMux
+	// 未匹配请求显式 404：指向 DefaultServeMux 会把 /debug/pprof 等全局路由暴露出去
+	s.router.NotFoundHandler = http.NotFoundHandler()
+	s.router.MethodNotAllowedHandler = http.NotFoundHandler()
 
 	// 应用中间件链：先应用标准 HTTP 中间件，再应用 FilterFunc
 	h := http.Handler(s.router)
@@ -89,6 +94,14 @@ func (s *Server) Endpoint() string {
 }
 
 func (s *Server) Start(ctx context.Context) error {
+	if s.stopped.Load() {
+		// quic-go 的 http3.Server 一旦 Close/Shutdown 便永久失效，
+		// 静默重启只会得到“假启动”，这里显式报错
+		return errors.New("http3 server cannot be restarted after Stop; create a new server instance")
+	}
+
+	s.everStarted.Store(true)
+
 	LogInfof("server listening on: %s", s.Addr)
 
 	if err := s.ListenAndServe(); err != nil {
@@ -102,9 +115,19 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 func (s *Server) Stop(ctx context.Context) error {
+	if s.everStarted.Load() {
+		s.stopped.Store(true)
+	}
+
 	LogInfo("server stopping...")
 
-	err := s.Close()
+	// 优先优雅关闭（发 GOAWAY、等待在途请求），
+	// ctx 取消或超时后降级为硬关闭
+	err := s.Shutdown(ctx)
+	if err != nil {
+		LogWarnf("graceful shutdown failed, closing: %s", err.Error())
+		err = s.Close()
+	}
 	s.err = nil
 
 	LogInfo("server stopped.")

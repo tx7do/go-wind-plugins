@@ -3,6 +3,7 @@ package nsq
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -40,6 +41,10 @@ type nsqBroker struct {
 
 func NewBroker(opts ...broker.Option) broker.Broker {
 	options := broker.NewOptionsAndApply(opts...)
+
+	if l := broker.LoggerFromOptions(&options); l != nil {
+		SetLogger(l)
+	}
 
 	b := &nsqBroker{
 		options: options,
@@ -126,9 +131,14 @@ func (b *nsqBroker) Connect() error {
 	}
 	b.producers = producers
 
-	var err error
+	var errs []error
 	b.subscribers.Foreach(func(topic string, sub broker.Subscriber) {
 		c := sub.(*subscriber)
+
+		// 已退订（closed）的订阅不重建 consumer
+		if c.IsClosed() {
+			return
+		}
 
 		channel := c.options.Queue
 		if len(channel) == 0 {
@@ -136,11 +146,22 @@ func (b *nsqBroker) Connect() error {
 		}
 
 		var cm *NSQ.Consumer
-		if cm, err = NSQ.NewConsumer(c.topic, channel, b.config); err != nil {
+		// 优先用订阅自身的 config（保留 WithMaxInFlight 等每订阅配置），nil 回退全局
+		subConfig := b.config
+		if c.config != nil {
+			subConfig = c.config
+		}
+		cm, cerr := NSQ.NewConsumer(c.topic, channel, subConfig)
+		if cerr != nil {
+			errs = append(errs, fmt.Errorf("topic %s: %w", topic, cerr))
 			return
 		}
 
 		if c.handlerFunc != nil {
+			cm.AddConcurrentHandlers(c.handlerFunc, c.concurrency)
+		} else if c.needsHandler {
+			// Subscribe 先于 Connect 登记的订阅：此处补建 handler
+			c.buildHandler(cm)
 			cm.AddConcurrentHandlers(c.handlerFunc, c.concurrency)
 		}
 
@@ -149,11 +170,16 @@ func (b *nsqBroker) Connect() error {
 		if len(b.lookupAddrs) > 0 {
 			_ = c.consumer.ConnectToNSQLookupds(b.lookupAddrs)
 		} else {
-			if err = c.consumer.ConnectToNSQDs(b.addrs); err != nil {
+			if cerr := c.consumer.ConnectToNSQDs(b.addrs); cerr != nil {
+				errs = append(errs, fmt.Errorf("topic %s: %w", topic, cerr))
 				return
 			}
 		}
 	})
+	// 汇总全部失败订阅（不再被后续成功掩盖），避免服务假启动
+	if joinErr := errors.Join(errs...); joinErr != nil {
+		return joinErr
+	}
 
 	b.running = true
 
@@ -196,7 +222,7 @@ func (b *nsqBroker) Disconnect() error {
 }
 
 func (b *nsqBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
-	return nil, errors.New("not implemented")
+	return broker.GenericRequest(ctx, b, topic, msg, opts...)
 }
 
 func (b *nsqBroker) Publish(ctx context.Context, topic string, msg *broker.Message, opts ...broker.PublishOption) error {
@@ -261,6 +287,11 @@ func (b *nsqBroker) publish(ctx context.Context, topic string, msg *broker.Messa
 }
 
 func (b *nsqBroker) getProducer() *NSQ.Producer {
+	// Disconnect 持锁写 producers，这里加锁防数据竞争
+	// （publish 路径不持 b 的锁调用本方法，无死锁风险）
+	b.Lock()
+	defer b.Unlock()
+
 	producerLen := len(b.producers)
 	if producerLen == 0 {
 		return nil
@@ -299,6 +330,31 @@ func (b *nsqBroker) Subscribe(topic string, handler broker.Handler, binder broke
 		channel = uuid.New().String() + "#ephemeral"
 	}
 
+	// 未启动时只登记订阅（handler 在 Connect 里统一建 consumer 并连接），
+	// 避免先 Subscribe 后 Connect 时产生两个 consumer，旧的泄漏
+	if !b.running {
+		sub := &subscriber{
+			n:            b,
+			options:      options,
+			topic:        topic,
+			needsHandler: true,
+			binder:       binder,
+			handler:      handler,
+			config:       &config,
+			concurrency:  concurrency,
+		}
+
+		if old := b.subscribers.Get(topic); old != nil {
+			// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+			if uerr := old.Unsubscribe(false); uerr != nil {
+				LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
+			}
+		}
+		b.subscribers.Add(topic, sub)
+
+		return sub, nil
+	}
+
 	c, err := NSQ.NewConsumer(topic, channel, &config)
 	if err != nil {
 		return nil, err
@@ -318,7 +374,14 @@ func (b *nsqBroker) Subscribe(topic string, handler broker.Handler, binder broke
 			m.Body = binder()
 
 			if errSub = broker.Unmarshal(b.options.Codec, nm.Body, &m.Body); errSub != nil {
-				return errSub
+				// 毒消息：通知 ErrorHandler 并 Finish，避免无限 Requeue 后被丢弃且无感知
+				LogErrorf("unmarshal message failed: %v", errSub)
+				p := &publication{topic: topic, nsqMsg: nm, msg: &m, err: errSub}
+				if eh := b.options.ErrorHandler; eh != nil {
+					_ = eh(b.options.Context, p)
+				}
+				nm.Finish()
+				return nil
 			}
 		} else {
 			m.Body = nm.Body
@@ -328,16 +391,20 @@ func (b *nsqBroker) Subscribe(topic string, handler broker.Handler, binder broke
 
 		if errSub = handler(b.options.Context, p); errSub != nil {
 			p.err = errSub
-			return errSub
-		}
-
-		if options.AutoAck {
-			if errSub = p.Ack(); errSub != nil {
-				LogErrorf("unable to commit msg: %v", errSub)
+			if eh := b.options.ErrorHandler; eh != nil {
+				_ = eh(b.options.Context, p)
 			}
+			// 处理失败即终止重投：显式 FIN 后必须返回 nil——
+			// 返回 err 会让 go-nsq 对已 FIN 的消息再发 REQ（协议错误）
+			if errFinish := p.Ack(); errFinish != nil {
+				LogErrorf("unable to commit msg: %v", errFinish)
+			}
+			return nil
 		}
 
-		return p.err
+		// AutoAck=false 的成功路径：由 handler 自行通过 publication.Ack 决定；
+		// 未 ack 的消息由 in-flight 超时重投（标准手动语义）
+		return nil
 	})
 
 	c.AddConcurrentHandlers(h, concurrency)
@@ -360,6 +427,12 @@ func (b *nsqBroker) Subscribe(topic string, handler broker.Handler, binder broke
 		concurrency: concurrency,
 	}
 
+	if old := b.subscribers.Get(topic); old != nil {
+		// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
+		}
+	}
 	b.subscribers.Add(topic, sub)
 
 	return sub, nil

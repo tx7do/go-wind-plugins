@@ -3,6 +3,7 @@ package rocketmqClientGo
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/tx7do/go-wind/log"
 )
@@ -10,6 +11,33 @@ import (
 const (
 	loggerKey = "[rocketmq] "
 )
+
+var (
+	libLoggerMu sync.RWMutex
+	libLogger   log.Logger
+)
+
+// SetLogger 注入本包内部日志使用的 logger，传入 nil 恢复为框架全局 logger。
+// 默认使用框架全局 logger（默认为静默 nop），也可通过 broker.WithLogger 选项在构造时注入。
+// 注意：logger 为包级生效，同进程后创建的 broker 会覆盖先注入的。
+func SetLogger(l log.Logger) {
+	libLoggerMu.Lock()
+	defer libLoggerMu.Unlock()
+	if l == nil {
+		libLogger = nil
+		return
+	}
+	libLogger = l
+}
+
+func getLogger() log.Logger {
+	libLoggerMu.RLock()
+	defer libLoggerMu.RUnlock()
+	if libLogger != nil {
+		return libLogger
+	}
+	return log.GetLogger()
+}
 
 type logger struct {
 	level log.Level
@@ -28,7 +56,7 @@ func (l *logger) logMsg(level log.Level, msg string, fields map[string]any) {
 		return
 	}
 	keyVals := toKeyVals(fields)
-	lg := log.GetLogger()
+	lg := getLogger()
 	switch level {
 	case log.LevelDebug:
 		lg.Debug(nil, loggerKey+msg, keyVals...)
@@ -48,7 +76,7 @@ func (l *logger) logMsgf(level log.Level, format string, a ...any) {
 		return
 	}
 	msg := fmt.Sprintf(format, a...)
-	lg := log.GetLogger()
+	lg := getLogger()
 	switch level {
 	case log.LevelDebug:
 		lg.Debug(nil, loggerKey+msg)

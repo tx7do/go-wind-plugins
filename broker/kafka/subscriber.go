@@ -149,7 +149,12 @@ func (s *subscriber) run() {
 func (s *subscriber) processBatchMessage() {
 	messageBuffer := make([]kafkaGo.Message, 0, s.batchSize)
 
-	ticker := time.NewTicker(s.batchInterval)
+	// 仅配 batchSize 未配 interval 时 interval 为 0，NewTicker(0) 直接 panic
+	interval := s.batchInterval
+	if interval <= 0 {
+		interval = 500 * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// 退避参数
@@ -275,17 +280,25 @@ func (s *subscriber) handleMessage(km kafkaGo.Message) bool {
 	ctx, span = s.b.startConsumerSpan(context.Background(), &km)
 
 	bm := &broker.Message{
+		ID:        string(km.Key),
 		Headers:   kafkaHeaderToMap(km.Headers),
 		Body:      nil,
+		Key:       string(km.Key),
 		Partition: km.Partition,
 		Offset:    km.Offset,
+		Msg:       km,
 	}
+
+	pub := newPublication(ctx, s.reader, km, bm)
 
 	if s.binder != nil {
 		bm.Body = s.binder()
 
 		if err = broker.Unmarshal(s.b.options.Codec, km.Value, &bm.Body); err != nil {
 			LogErrorf("unmarshal message failed: %v", err)
+			if eh := s.b.options.ErrorHandler; eh != nil {
+				_ = eh(ctx, pub)
+			}
 			s.b.finishConsumerSpan(ctx, span, err)
 			return true
 		}
@@ -293,10 +306,11 @@ func (s *subscriber) handleMessage(km kafkaGo.Message) bool {
 		bm.Body = km.Value
 	}
 
-	pub := newPublication(ctx, s.reader, km, bm)
-
 	if err = s.handler(ctx, pub); err != nil {
 		LogErrorf("handle message failed: %v", err)
+		if eh := s.b.options.ErrorHandler; eh != nil {
+			_ = eh(ctx, pub)
+		}
 		s.b.finishConsumerSpan(ctx, span, err)
 		return true
 	}

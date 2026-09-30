@@ -28,7 +28,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -83,7 +82,9 @@ func NewServer(opts ...Option) *Server {
 	srv := &Server{
 		network: "tcp",
 		address: ":0",
-		timeout: 1 * time.Second,
+		// timeout 同时作为会话空闲读写超时；默认关闭（0），避免误杀长连接，
+		// 需要回收半开连接时通过 WithTimeout 显式开启
+		timeout: 0,
 
 		messageHandlers: make(NetMessageHandlerMap),
 
@@ -138,7 +139,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.running = true
 	s.stateMu.Unlock()
 
-	log.Printf("[tcp] server listening on: %s", lis.Addr().String())
+	LogInfof("server listening on: %s", lis.Addr().String())
 
 	go s.doAccept()
 
@@ -154,27 +155,50 @@ func (s *Server) Start(ctx context.Context) error {
 	if lis2 != nil {
 		_ = lis2.Close()
 	}
-	log.Println("[tcp] server stopped")
+
+	// 关闭全部会话：不关的话每连接读写 goroutine 在停机后继续存活
+	if s.sessionManager != nil {
+		s.sessionManager.rangeSessions(func(_ SessionID, session *Session) bool {
+			if session != nil {
+				session.Close()
+			}
+			return true
+		})
+	}
+
+	LogInfof("server stopped")
 	return nil
 }
 
 // Stop 优雅关闭 TCP 服务器。
 func (s *Server) Stop(_ context.Context) error {
 	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-
 	if !s.running {
+		s.stateMu.Unlock()
 		return nil
 	}
-
 	s.running = false
+	s.stateMu.Unlock()
+
+	var err error
 	if s.lis != nil {
-		err := s.lis.Close()
+		err = s.lis.Close()
 		s.lis = nil
-		log.Println("[tcp] server stopped")
-		return err
 	}
-	return nil
+
+	// 关闭全部会话：不关的话每连接读写 goroutine 在 Stop 后继续存活
+	if s.sessionManager != nil {
+		s.sessionManager.rangeSessions(func(_ SessionID, session *Session) bool {
+			if session != nil {
+				session.Close()
+			}
+			return true
+		})
+	}
+
+	LogInfof("server stopped")
+
+	return err
 }
 
 // Endpoint 返回服务器的访问地址。
@@ -222,7 +246,7 @@ func RegisterServerMessageHandler[T any](srv *Server, messageType NetMessageType
 			case *T:
 				return handler(sessionId, t)
 			default:
-				log.Printf("[tcp] invalid payload struct type: %T", t)
+				LogError("invalid payload struct type:", t)
 				return errors.New("invalid payload struct type")
 			}
 		},
@@ -289,7 +313,7 @@ func (s *Server) SendMessage(sessionId SessionID, messageType NetMessageType, me
 func (s *Server) Broadcast(messageType NetMessageType, message NetMessagePayload) {
 	buf, err := s.marshalNetPacket(messageType, message)
 	if err != nil {
-		log.Printf("[tcp] marshal message exception: %v", err)
+		LogError("marshal message exception:", err)
 		return
 	}
 
@@ -322,7 +346,7 @@ func (s *Server) unmarshalNetPacket(buf []byte) (*MessageHandlerData, NetMessage
 func (s *Server) defaultUnmarshalNetPacket(buf []byte) (handler *MessageHandlerData, payload NetMessagePayload, err error) {
 	var msg NetPacket
 	if err = msg.Unmarshal(buf); err != nil {
-		log.Printf("[tcp] decode message exception: %s", err)
+		LogErrorf("decode message exception: %s", err)
 		return
 	}
 
@@ -334,7 +358,7 @@ func (s *Server) defaultUnmarshalNetPacket(buf []byte) (handler *MessageHandlerD
 		payload = msg.Payload
 	} else {
 		if err = s.codec.Unmarshal(msg.Payload, payload); err != nil {
-			log.Printf("[tcp] unmarshal message exception: %s", err)
+			LogErrorf("unmarshal message exception: %s", err)
 			return
 		}
 	}
@@ -362,7 +386,7 @@ func (s *Server) defaultHandleSocketRawData(sessionId SessionID, buf []byte) err
 
 	handler, payload, err := s.unmarshalNetPacket(buf)
 	if err != nil {
-		log.Printf("[tcp] unmarshal message failed: %s", err)
+		LogErrorf("unmarshal message failed: %s", err)
 		if span != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
@@ -373,7 +397,7 @@ func (s *Server) defaultHandleSocketRawData(sessionId SessionID, buf []byte) err
 	}
 
 	if err = handler.Handler(sessionId, payload); err != nil {
-		log.Printf("[tcp] message handler failed: %s", err)
+		LogErrorf("message handler failed: %s", err)
 		if span != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
@@ -411,10 +435,11 @@ func (s *Server) doAccept() {
 			s.stateMu.RUnlock()
 
 			if !running || errors.Is(err, net.ErrClosed) {
+				LogInfof("accept loop stopped: %s", err.Error())
 				return
 			}
 
-			log.Printf("[tcp] accept connection failed: %s", err)
+			LogErrorf("accept connection failed: %s", err.Error())
 			continue
 		}
 
@@ -423,6 +448,7 @@ func (s *Server) doAccept() {
 		}
 
 		session := NewSession(conn, s)
+		session.idleTimeout = s.timeout
 		s.sessionManager.addSession(session)
 		session.Listen()
 	}

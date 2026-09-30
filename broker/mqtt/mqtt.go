@@ -136,6 +136,10 @@ func newClient(addrs []string, opts broker.Options, b *mqttBroker) paho.Client {
 func newBroker(opts ...broker.Option) broker.Broker {
 	options := broker.NewOptionsAndApply(opts...)
 
+	if l := broker.LoggerFromOptions(&options); l != nil {
+		SetLogger(l)
+	}
+
 	b := &mqttBroker{
 		options:     options,
 		addrs:       options.Addrs,
@@ -199,7 +203,7 @@ func (m *mqttBroker) Disconnect() error {
 }
 
 func (m *mqttBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
-	return nil, errors.New("not implemented")
+	return broker.GenericRequest(ctx, m, topic, msg, opts...)
 }
 
 func (m *mqttBroker) Publish(ctx context.Context, topic string, msg *broker.Message, opts ...broker.PublishOption) error {
@@ -285,6 +289,9 @@ func (m *mqttBroker) Subscribe(topic string, handler broker.Handler, binder brok
 			if err := broker.Unmarshal(m.options.Codec, mq.Payload(), &msg.Body); err != nil {
 				p.err = err
 				LogError("unmarshal message failed:", err)
+				if eh := m.options.ErrorHandler; eh != nil {
+					_ = eh(context.Background(), p)
+				}
 				return
 			}
 		} else {
@@ -294,6 +301,19 @@ func (m *mqttBroker) Subscribe(topic string, handler broker.Handler, binder brok
 		if err := handler(context.Background(), p); err != nil {
 			p.err = err
 			LogError("handle message failed:", err)
+			if eh := m.options.ErrorHandler; eh != nil {
+				_ = eh(context.Background(), p)
+			}
+		}
+	}
+
+	// 同主题重复订阅：必须【先退旧再订新】。
+	// paho 对同一 topic 只保留一条 route（addRoute 替换旧回调），
+	// 若先订新再退旧，Unsubscribe 的 deleteRoute 会把新订阅一并删掉，
+	// 导致 broker 端无订阅、消息静默丢失
+	if old := m.subscribers.Get(topic); old != nil {
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
 		}
 	}
 

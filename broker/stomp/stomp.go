@@ -45,6 +45,10 @@ type stompBroker struct {
 func NewBroker(opts ...broker.Option) broker.Broker {
 	options := broker.NewOptionsAndApply(opts...)
 
+	if l := broker.LoggerFromOptions(&options); l != nil {
+		SetLogger(l)
+	}
+
 	b := &stompBroker{
 		options:     options,
 		subscribers: broker.NewSubscriberSyncMap(),
@@ -169,17 +173,18 @@ func (b *stompBroker) Connect() error {
 func (b *stompBroker) Disconnect() error {
 	var err error
 
+	// 先退订（UNSUBSCRIBE 帧需要连接可用），再断开连接
+	b.subscribers.Clear()
+
 	if b.stompConn != nil {
 		err = b.stompConn.Disconnect()
 	}
-
-	b.subscribers.Clear()
 
 	return err
 }
 
 func (b *stompBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
-	return nil, errors.New("not implemented")
+	return broker.GenericRequest(ctx, b, topic, msg, opts...)
 }
 
 func (b *stompBroker) Publish(ctx context.Context, topic string, msg *broker.Message, opts ...broker.PublishOption) error {
@@ -302,31 +307,51 @@ func (b *stompBroker) Subscribe(topic string, handler broker.Handler, binder bro
 
 				ctx, span := b.startConsumerSpan(options.Context, msg)
 
+				// 每条消息独立 err，避免并发消费共享外层变量
+				var msgErr error
+
 				if binder != nil {
 					m.Body = binder()
 
-					if err = broker.Unmarshal(b.options.Codec, msg.Body, &m.Body); err != nil {
-						p.err = err
-						LogError(err)
-						b.finishConsumerSpan(ctx, span, p.err)
+					if msgErr = broker.Unmarshal(b.options.Codec, msg.Body, &m.Body); msgErr != nil {
+						// 毒消息：Nack（AckClientIndividual 模式下不 Nack 会一直挂起）
+						p.err = msgErr
+						LogError(msgErr)
+						if eh := b.options.ErrorHandler; eh != nil {
+							_ = eh(ctx, p)
+						}
+						if !options.AutoAck {
+							_ = msg.Conn.Nack(msg)
+						}
+						b.finishConsumerSpan(ctx, span, msgErr)
 						return
 					}
 				} else {
 					m.Body = msg.Body
 				}
 
-				if err = handler(ctx, p); p.err != nil {
-					p.err = err
-					b.finishConsumerSpan(ctx, span, p.err)
+				if msgErr = handler(ctx, p); msgErr != nil {
+					// 处理失败：不 ACK，记入 publication 与 span；
+					// AckClientIndividual 模式补 Nack 触发重投（与 unmarshal 失败路径一致）
+					if eh := b.options.ErrorHandler; eh != nil {
+						_ = eh(ctx, p)
+					}
+					if !options.AutoAck {
+						_ = msg.Conn.Nack(msg)
+					}
+					p.err = msgErr
+					b.finishConsumerSpan(ctx, span, msgErr)
 					return
 				}
 
-				if options.AutoAck || ackSuccess {
-					err = msg.Conn.Ack(msg)
-					p.err = err
+				// AckAuto 模式由 STOMP 服务端自动确认，显式 ACK 反而可能被 broker 拒绝；
+				// 仅 AckClientIndividual（ackSuccess）时需要显式 ACK
+				if ackSuccess {
+					msgErr = msg.Conn.Ack(msg)
+					p.err = msgErr
 				}
 
-				b.finishConsumerSpan(ctx, span, err)
+				b.finishConsumerSpan(ctx, span, msgErr)
 			}(msg)
 		}
 	}()
@@ -338,6 +363,12 @@ func (b *stompBroker) Subscribe(topic string, handler broker.Handler, binder bro
 		options: options,
 	}
 
+	if old := b.subscribers.Get(topic); old != nil {
+		// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
+		}
+	}
 	b.subscribers.Add(topic, subs)
 
 	return subs, nil

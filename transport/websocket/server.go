@@ -34,10 +34,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	ws "github.com/gorilla/websocket"
 
@@ -96,6 +96,8 @@ type Server struct {
 	socketRawDataHandler SocketRawDataHandler
 
 	handlerMu sync.RWMutex
+
+	timeout time.Duration
 }
 
 // NewServer 创建一个 WebSocket 服务器实例。
@@ -167,7 +169,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.server = &http.Server{Handler: h}
 	s.server.BaseContext = func(net.Listener) context.Context { return ctx }
 
-	fmt.Printf("[%s] server listening on: %s\n", KindWebsocket, ln.Addr().String())
+	LogInfof("server listening on: %s", ln.Addr().String())
 
 	errChan := make(chan error, 1)
 	go func() {
@@ -314,7 +316,7 @@ func (s *Server) SendMessage(sessionId SessionID, messageType NetMessageType, me
 func (s *Server) Broadcast(messageType NetMessageType, message MessagePayload) {
 	buf, err := s.marshalMessage(messageType, message)
 	if err != nil {
-		log.Printf("[websocket] broadcast marshal error: %v", err)
+		LogErrorf("broadcast marshal error: %v", err)
 		return
 	}
 
@@ -376,7 +378,7 @@ func (s *Server) wsHandler(res http.ResponseWriter, req *http.Request) {
 
 	conn, err := upgrader.Upgrade(res, req, nil)
 	if err != nil {
-		log.Printf("[websocket] upgrade exception: %v", err)
+		LogError("upgrade exception:", err)
 		return
 	}
 
@@ -387,6 +389,7 @@ func (s *Server) wsHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	session := NewSession(s, conn, vars)
+	session.readTimeout = s.timeout
 	s.sessionManager.AddSession(session)
 	session.Listen()
 }

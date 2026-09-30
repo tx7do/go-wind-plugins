@@ -62,7 +62,12 @@ func (b *jetStreamBroker) Subscribe(topic string, handler broker.Handler, binder
 
 		if binder != nil {
 			if b.options.Codec.Name() == kProto.Name {
-				m.Body = binder().(proto.Message)
+				if pm, pmOK := binder().(proto.Message); pmOK {
+					m.Body = pm
+				} else {
+					// binder 未返回 proto.Message：退回原始字节，避免断言 panic
+					m.Body = msg.Data
+				}
 			} else {
 				m.Body = binder()
 			}
@@ -142,6 +147,12 @@ func (b *jetStreamBroker) Subscribe(topic string, handler broker.Handler, binder
 
 	jsSub.s = sub
 
+	if old := b.subscribers.Get(topic); old != nil {
+		// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
+		}
+	}
 	b.subscribers.Add(topic, jsSub)
 
 	LogInfof("subscribed to JetStream subject: %s (pull=%v)", topic, isPull)
@@ -161,7 +172,16 @@ func (b *jetStreamBroker) pullLoop(sub *natsGo.Subscription, handler func(*natsG
 
 		msgs, err := sub.Fetch(batchSize)
 		if err != nil {
-			if errors.Is(err, natsGo.ErrTimeout) || errors.Is(err, natsGo.ErrConnectionClosed) {
+			if errors.Is(err, natsGo.ErrTimeout) {
+				continue
+			}
+			if errors.Is(err, natsGo.ErrConnectionClosed) {
+				// 连接断开时 Fetch 立即失败，退避避免热循环
+				select {
+				case <-jsSub.options.Context.Done():
+					return
+				case <-time.After(time.Second):
+				}
 				continue
 			}
 			if jsSub.IsClosed() {

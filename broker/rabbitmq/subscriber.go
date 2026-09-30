@@ -1,6 +1,7 @@
 package rabbitmq
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -59,6 +60,21 @@ func (s *subscriber) Unsubscribe(removeFromManager bool) error {
 	return err
 }
 
+// declareAndBind 同步声明队列并绑定到 exchange。
+// 首次订阅必须同步完成：否则 Subscribe 返回后队列尚未绑定，
+// 此时向 exchange 投递的消息会因无匹配绑定而直接丢弃。
+func (s *subscriber) declareAndBind() error {
+	s.r.mtx.Lock()
+	defer s.r.mtx.Unlock()
+
+	if !s.r.conn.connected {
+		return errors.New("rabbitmq: not connected")
+	}
+
+	return s.r.conn.DeclarePublishQueue(s.exchangeName, s.options.Queue, s.topic, s.headers, s.queueArgs, s.durableQueue, s.autoDelete)
+}
+
+// resubscribe 消费消息并处理断线重连（原始模式，无双消费者风险）
 func (s *subscriber) resubscribe() {
 	minResubscribeDelay := defaultMinResubscribeDelay
 	maxResubscribeDelay := defaultMaxResubscribeDelay
@@ -66,9 +82,7 @@ func (s *subscriber) resubscribe() {
 	reSubscribeDelay := defaultResubscribeDelay
 
 	for {
-		closed := s.IsClosed()
-		if closed {
-			// we are unsubscribed, showdown routine
+		if s.IsClosed() {
 			return
 		}
 
@@ -111,9 +125,7 @@ func (s *subscriber) resubscribe() {
 			continue
 		}
 		for d := range sub {
-			s.r.wg.Add(1)
 			s.fn(d)
-			s.r.wg.Done()
 		}
 	}
 }

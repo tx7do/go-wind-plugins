@@ -97,6 +97,9 @@ func (b *jetStreamBroker) publish(ctx context.Context, topic string, msg *broker
 ///////////////////////////////////////////////////////////////////////////////
 
 func (b *jetStreamBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
+	if msg == nil {
+		return nil, broker.ErrRequestMessageNil
+	}
 	b.RLock()
 	defer b.RUnlock()
 
@@ -114,7 +117,11 @@ func (b *jetStreamBroker) Request(ctx context.Context, topic string, msg *broker
 	m := natsGo.NewMsg(topic)
 	m.Data = buf
 
+	// 标准 RequestOptions.Timeout 优先（WithRequestTimeout），专有 key 作为兜底
 	var timeout = time.Second * 2
+	if options.Timeout > 0 {
+		timeout = options.Timeout
+	}
 	if v, ok := options.Context.Value(requestTimeoutKey{}).(time.Duration); ok && v > 0 {
 		timeout = v
 	}

@@ -7,6 +7,8 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/tx7do/go-wind/log"
+
 	"github.com/tx7do/go-wind-plugins/encoding"
 	_ "github.com/tx7do/go-wind-plugins/encoding/json"
 	_ "github.com/tx7do/go-wind-plugins/encoding/proto"
@@ -110,6 +112,31 @@ func OptionContextWithValue(k, v any) Option {
 		}
 		o.Context = context.WithValue(o.Context, k, v)
 	}
+}
+
+// loggerOptionsKey 用于在 Options.Context 中存取注入的 logger
+type loggerOptionsKey struct{}
+
+// WithLogger 注入库内部日志使用的 logger。
+// 各 broker 构造时读取此选项，接管 LogDebug/LogInfo/LogWarn/LogError 系列内部日志，
+// 便于统一控制级别过滤与输出目标；未注入时使用框架全局 logger。
+// 注意：logger 为包级生效，同进程后创建的 broker 会覆盖先注入的。
+func WithLogger(logger log.Logger) Option {
+	return func(o *Options) {
+		if o == nil {
+			return
+		}
+		OptionContextWithValue(loggerOptionsKey{}, logger)(o)
+	}
+}
+
+// LoggerFromOptions 取出注入的 logger，未注入时返回 nil
+func LoggerFromOptions(o *Options) log.Logger {
+	if o == nil || o.Context == nil {
+		return nil
+	}
+	l, _ := o.Context.Value(loggerOptionsKey{}).(log.Logger)
+	return l
 }
 
 // WithAddress set broker address

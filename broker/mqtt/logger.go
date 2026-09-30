@@ -2,79 +2,154 @@ package mqtt
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/tx7do/go-wind/log"
 )
 
-const logKey = "[mqtt]"
+const (
+	logKey = "[mqtt]"
+)
+
+var (
+	libLoggerMu sync.RWMutex
+	libLogger   log.Logger
+)
+
+// SetLogger 注入本包内部日志使用的 logger，传入 nil 恢复为框架全局 logger。
+// 默认使用框架全局 logger（默认为静默 nop），也可通过 broker.WithLogger 选项在构造时注入。
+// 注意：logger 为包级生效，同进程后创建的 broker 会覆盖先注入的。
+func SetLogger(l log.Logger) {
+	libLoggerMu.Lock()
+	defer libLoggerMu.Unlock()
+	if l == nil {
+		libLogger = nil
+		return
+	}
+	libLogger = l
+}
+
+func getLogger() log.Logger {
+	libLoggerMu.RLock()
+	defer libLoggerMu.RUnlock()
+	if libLogger != nil {
+		return libLogger
+	}
+	return log.GetLogger()
+}
+
+// logAt 经由注入的 logger 输出日志，未注入时退回框架全局 logger
+func logAt(level log.Level, msg string) {
+	msg = logKey + " " + msg
+	switch level {
+	case log.LevelDebug:
+		getLogger().Debug(nil, msg)
+	case log.LevelInfo:
+		getLogger().Info(nil, msg)
+	case log.LevelWarn:
+		getLogger().Warn(nil, msg)
+	default:
+		getLogger().Error(nil, msg)
+	}
+}
+
+// logAtf 为 logAt 的格式化版本
+func logAtf(level log.Level, format string, args ...any) {
+	logAt(level, fmt.Sprintf(format, args...))
+}
 
 func LogDebug(args ...any) {
-	log.GetLogger().Debug(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-func LogInfo(args ...any) {
-	log.GetLogger().Info(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-func LogWarn(args ...any) {
-	log.GetLogger().Warn(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-func LogError(args ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-func LogFatal(args ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(args...)))
-}
-func LogDebugf(format string, args ...any) {
-	log.GetLogger().Debug(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-func LogInfof(format string, args ...any) {
-	log.GetLogger().Info(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-func LogWarnf(format string, args ...any) {
-	log.GetLogger().Warn(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-func LogErrorf(format string, args ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
-}
-func LogFatalf(format string, args ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(format, args...)))
+	logAt(log.LevelDebug, fmt.Sprint(args...))
 }
 
-// ErrorLogger adapts to paho MQTT logger interface
+func LogInfo(args ...any) {
+	logAt(log.LevelInfo, fmt.Sprint(args...))
+}
+
+func LogWarn(args ...any) {
+	logAt(log.LevelWarn, fmt.Sprint(args...))
+}
+
+func LogError(args ...any) {
+	logAt(log.LevelError, fmt.Sprint(args...))
+}
+
+func LogFatal(args ...any) {
+	logAt(log.LevelError, fmt.Sprint(args...))
+}
+
+func LogDebugf(format string, args ...any) {
+	logAtf(log.LevelDebug, format, args...)
+}
+
+func LogInfof(format string, args ...any) {
+	logAtf(log.LevelInfo, format, args...)
+}
+
+func LogWarnf(format string, args ...any) {
+	logAtf(log.LevelWarn, format, args...)
+}
+
+func LogErrorf(format string, args ...any) {
+	logAtf(log.LevelError, format, args...)
+}
+
+func LogFatalf(format string, args ...any) {
+	logAtf(log.LevelError, format, args...)
+}
+
+///
+/// ErrorLogger
+///
+
 type ErrorLogger struct{}
 
 func (ErrorLogger) Println(v ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(v...)))
-}
-func (ErrorLogger) Printf(f string, v ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(f, v...)))
+	LogError(v...)
 }
 
-// CriticalLogger adapts to paho MQTT logger interface
+func (ErrorLogger) Printf(format string, v ...any) {
+	LogErrorf(format, v...)
+}
+
+///
+/// CriticalLogger
+///
+
 type CriticalLogger struct{}
 
 func (CriticalLogger) Println(v ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(v...)))
-}
-func (CriticalLogger) Printf(f string, v ...any) {
-	log.GetLogger().Error(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(f, v...)))
+	LogFatal(v...)
 }
 
-// WarnLogger adapts to paho MQTT logger interface
+func (CriticalLogger) Printf(format string, v ...any) {
+	LogFatalf(format, v...)
+}
+
+///
+/// WarnLogger
+///
+
 type WarnLogger struct{}
 
 func (WarnLogger) Println(v ...any) {
-	log.GetLogger().Warn(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(v...)))
-}
-func (WarnLogger) Printf(f string, v ...any) {
-	log.GetLogger().Warn(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(f, v...)))
+	LogWarn(v...)
 }
 
-// DebugLogger adapts to paho MQTT logger interface
+func (WarnLogger) Printf(format string, v ...any) {
+	LogWarnf(format, v...)
+}
+
+///
+/// DebugLogger
+///
+
 type DebugLogger struct{}
 
 func (DebugLogger) Println(v ...any) {
-	log.GetLogger().Debug(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprint(v...)))
+	LogDebug(v...)
 }
-func (DebugLogger) Printf(f string, v ...any) {
-	log.GetLogger().Debug(nil, fmt.Sprintf("%s %s", logKey, fmt.Sprintf(f, v...)))
+
+func (DebugLogger) Printf(format string, v ...any) {
+	LogDebugf(format, v...)
 }

@@ -1,8 +1,8 @@
 package kcp
 
 import (
-	"log"
 	"sync"
+	"time"
 
 	"github.com/tx7do/go-utils/id"
 	"github.com/xtaci/kcp-go/v5"
@@ -20,15 +20,18 @@ type SessionHooks interface {
 }
 
 type Session struct {
-	id         SessionID
-	conn       *kcp.UDPSession
-	connMu     sync.RWMutex
-	send       chan []byte
-	done       chan struct{}
-	listenOnce sync.Once
-	closeOnce  sync.Once
-	wg         sync.WaitGroup
-	hooks      SessionHooks
+	id     SessionID
+	conn   *kcp.UDPSession
+	connMu sync.RWMutex
+	send   chan []byte
+	done   chan struct{}
+
+	// idleTimeout 单次读/写操作的超时；0 表示不设置（默认）
+	idleTimeout time.Duration
+	listenOnce  sync.Once
+	closeOnce   sync.Once
+	wg          sync.WaitGroup
+	hooks       SessionHooks
 }
 
 func NewSession(conn *kcp.UDPSession, hooks SessionHooks) *Session {
@@ -63,6 +66,9 @@ func (c *Session) SendMessage(message []byte) {
 	case <-c.done:
 		return
 	case c.send <- message:
+	case <-time.After(5 * time.Second):
+		// 慢消费者（writePump 阻塞）不能无限拖住调用方/广播方
+		LogErrorf("session %s send buffer full, message dropped", c.SessionID())
 	}
 }
 
@@ -98,7 +104,7 @@ func (c *Session) closeConnect() {
 
 	if conn != nil {
 		if err := conn.Close(); err != nil {
-			log.Printf("[kcp] disconnect error: %s", err)
+			LogErrorf("disconnect error: %s", err)
 		}
 	}
 }
@@ -117,13 +123,18 @@ func (c *Session) writePump() {
 			if conn == nil {
 				return
 			}
-			if _, err := conn.Write(msg); err != nil {
+			// 写入带长度前缀的帧，保证对端能正确分包
+			if c.idleTimeout > 0 {
+				_ = conn.SetWriteDeadline(time.Now().Add(c.idleTimeout))
+			}
+
+			if err := WriteFrame(conn, msg); err != nil {
 				select {
 				case <-c.done:
 					return
 				default:
 				}
-				log.Printf("[kcp] write message error: %v", err)
+				LogError("write message error: ", err)
 				return
 			}
 		}
@@ -133,8 +144,6 @@ func (c *Session) writePump() {
 func (c *Session) readPump() {
 	defer c.wg.Done()
 	defer c.Close()
-
-	buf := make([]byte, recvBufferSize)
 
 	for {
 		select {
@@ -148,14 +157,19 @@ func (c *Session) readPump() {
 			return
 		}
 
-		readLen, err := conn.Read(buf)
+		if c.idleTimeout > 0 {
+			_ = conn.SetReadDeadline(time.Now().Add(c.idleTimeout))
+		}
+
+		// 按帧读取，解决粘包/拆包问题
+		frame, err := ReadFrame(conn)
 		if err != nil {
 			select {
 			case <-c.done:
 				return
 			default:
 			}
-			log.Printf("[kcp] read message error: %v", err)
+			LogErrorf("read message error: %v", err)
 			return
 		}
 
@@ -163,8 +177,8 @@ func (c *Session) readPump() {
 			continue
 		}
 
-		if err = c.hooks.handleSocketRawData(c.SessionID(), buf[:readLen]); err != nil {
-			log.Printf("[kcp] process message error: %v", err)
+		if err = c.hooks.handleSocketRawData(c.SessionID(), frame); err != nil {
+			LogErrorf("process message error: %v", err)
 		}
 	}
 }

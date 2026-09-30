@@ -33,7 +33,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -95,14 +94,14 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
-	log.Println("[hptimer] server starting...")
+	LogInfof("server starting...")
 
 	// 创建并启动定时器引擎
 	s.hpTimer = NewHighPrecisionTimer(s.timerObserver)
 	s.hpTimer.Start()
 
 	s.started.Store(true)
-	log.Println("[hptimer] server started successfully")
+	LogInfof("server started successfully")
 
 	// 阻塞等待 ctx 取消
 	<-ctx.Done()
@@ -133,27 +132,36 @@ func (s *Server) stopInternal(ctx context.Context) error {
 		s.stopping.Store(false)
 	}()
 
-	log.Println("[hptimer] server stopping...")
+	LogInfof("server stopping...")
 
-	stopCtx, stopCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer stopCancel()
-
-	wait := make(chan struct{})
-	go func() {
+	// 停止定时器引擎
+	// WithGracefullyShutdown(false) 时跳过排空等待，立即停止
+	if !s.gracefullyShutdown {
 		if s.hpTimer != nil {
 			s.hpTimer.Stop()
 		}
-		close(wait)
-	}()
+		LogInfof("timer engine stopped (immediate)")
+	} else {
+		stopCtx, stopCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer stopCancel()
 
-	select {
-	case <-wait:
-		log.Println("[hptimer] timer engine stopped gracefully")
-	case <-stopCtx.Done():
-		log.Println("[hptimer] shutdown timeout, force stopped")
+		wait := make(chan struct{})
+		go func() {
+			if s.hpTimer != nil {
+				s.hpTimer.Stop()
+			}
+			close(wait)
+		}()
+
+		select {
+		case <-wait:
+			LogInfof("timer engine stopped gracefully")
+		case <-stopCtx.Done():
+			LogWarnf("shutdown timeout, force stopped")
+		}
 	}
 
-	log.Println("[hptimer] server stopped successfully")
+	LogInfof("server stopped successfully")
 	return nil
 }
 

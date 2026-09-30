@@ -3,9 +3,9 @@ package tcp
 import (
 	"context"
 	"errors"
-	"log"
 	"net"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/tx7do/go-wind-plugins/encoding"
@@ -25,7 +25,9 @@ type ClientHandlerData struct {
 type ClientMessageHandlerMap map[NetMessageType]ClientHandlerData
 
 type Client struct {
-	conn net.Conn
+	connMu  sync.RWMutex
+	writeMu sync.Mutex
+	conn    net.Conn
 
 	url      string
 	endpoint *url.URL
@@ -68,15 +70,17 @@ func (c *Client) Connect() error {
 		return errors.New("endpoint is nil")
 	}
 
-	log.Printf("[tcp] connecting to %s", c.endpoint.String())
+	LogInfof("connecting to %s", c.endpoint.String())
 
 	conn, err := net.Dial("tcp", c.endpoint.String())
 	if err != nil {
-		log.Printf("[tcp] cant connect to server: %s", err)
+		LogErrorf("cant connect to server: %s", err.Error())
 		return err
 	}
 
+	c.connMu.Lock()
 	c.conn = conn
+	c.connMu.Unlock()
 
 	go c.run()
 
@@ -84,11 +88,15 @@ func (c *Client) Connect() error {
 }
 
 func (c *Client) Disconnect() {
-	if c.conn != nil {
-		if err := c.conn.Close(); err != nil {
-			log.Printf("[tcp] disconnect error: %s", err)
+	c.connMu.Lock()
+	conn := c.conn
+	c.conn = nil
+	c.connMu.Unlock()
+
+	if conn != nil {
+		if err := conn.Close(); err != nil {
+			LogErrorf("disconnect error: %s", err.Error())
 		}
-		c.conn = nil
 	}
 }
 
@@ -107,7 +115,7 @@ func RegisterClientMessageHandler[T any](cli *Client, messageType NetMessageType
 			case *T:
 				return handler(t)
 			default:
-				log.Printf("[tcp] invalid payload struct type: %T", t)
+				LogError("invalid payload struct type:", t)
 				return errors.New("invalid payload struct type")
 			}
 		},
@@ -123,7 +131,11 @@ func (c *Client) DeregisterMessageHandler(messageType NetMessageType) {
 }
 
 func (c *Client) SendRawData(message []byte) error {
-	if c.conn == nil {
+	c.connMu.RLock()
+	conn := c.conn
+	c.connMu.RUnlock()
+
+	if conn == nil {
 		return errors.New("client is not connected")
 	}
 
@@ -136,7 +148,12 @@ func (c *Client) SendRawData(message []byte) error {
 		c.m.Counter(context.Background(), "tcp.client.messages.sent", 1, labels)
 	}
 
-	if _, err := c.conn.Write(message); err != nil {
+	// 写锁串行化：并发发送时单帧 Write 交错会破坏帧流
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	// 写入带长度前缀的帧，与服务端分包逻辑对应
+	if err := WriteFrame(conn, message); err != nil {
 		if c.m != nil {
 			c.m.Counter(context.Background(), "tcp.client.messages.errors", 1, map[string]string{
 				"rpc.system": "tcp",
@@ -156,14 +173,15 @@ func (c *Client) SendRawData(message []byte) error {
 func (c *Client) SendMessage(messageType int, message any) error {
 	var msg NetPacket
 	msg.Type = NetMessageType(messageType)
-	var err error
-	msg.Payload, err = c.codec.Marshal(message)
+
+	payload, err := c.codec.Marshal(message)
 	if err != nil {
 		return err
 	}
+	msg.Payload = payload
 
-	var buff []byte
-	if buff, err = msg.Marshal(); err != nil {
+	buff, err := msg.Marshal()
+	if err != nil {
 		return err
 	}
 
@@ -171,27 +189,45 @@ func (c *Client) SendMessage(messageType int, message any) error {
 }
 
 func (c *Client) run() {
-	defer c.Disconnect()
-
-	buf := make([]byte, 102400)
+	// 只关闭本次连接：旧读循环收敛时不应误杀用户新建的连接
+	c.connMu.RLock()
+	conn := c.conn
+	c.connMu.RUnlock()
+	defer func() {
+		c.connMu.Lock()
+		if c.conn == conn {
+			c.conn = nil
+		}
+		c.connMu.Unlock()
+		if conn != nil {
+			if err := conn.Close(); err != nil {
+				LogErrorf("disconnect error: %s", err.Error())
+			}
+		}
+	}()
 
 	for {
-		readLen, err := c.conn.Read(buf)
+		if conn == nil {
+			return
+		}
+
+		// 按帧读取，与服务端分包逻辑对应
+		frame, err := ReadFrame(conn)
 		if err != nil {
-			log.Printf("[tcp] read message error: %v", err)
+			LogErrorf("read message error: %v", err)
 			return
 		}
 
 		if c.rawMessageHandler != nil {
-			if err := c.rawMessageHandler(buf[:readLen]); err != nil {
-				log.Printf("[tcp] raw data handler exception: %s", err)
+			if err := c.rawMessageHandler(frame); err != nil {
+				LogErrorf("raw data handler exception: %s", err)
 				continue
 			}
 			continue
 		}
 
-		if err = c.messageHandler(buf[:readLen]); err != nil {
-			log.Printf("[tcp] process message error: %v", err)
+		if err = c.messageHandler(frame); err != nil {
+			LogErrorf("process message error: %v", err)
 		}
 
 		if c.m != nil {
@@ -205,13 +241,13 @@ func (c *Client) run() {
 func (c *Client) messageHandler(buf []byte) error {
 	var msg NetPacket
 	if err := msg.Unmarshal(buf); err != nil {
-		log.Printf("[tcp] decode message exception: %s", err)
+		LogErrorf("decode message exception: %s", err)
 		return err
 	}
 
 	handlerData, ok := c.messageHandlers[msg.Type]
 	if !ok {
-		log.Printf("[tcp] message type not found: %d", msg.Type)
+		LogError("message type not found:", msg.Type)
 		return errors.New("message handler not found")
 	}
 
@@ -221,7 +257,7 @@ func (c *Client) messageHandler(buf []byte) error {
 		payload = handlerData.Creator()
 
 		if err := c.codec.Unmarshal(msg.Payload, payload); err != nil {
-			log.Printf("[tcp] unmarshal message exception: %s", err)
+			LogErrorf("unmarshal message exception: %s", err)
 			return err
 		}
 	} else {
@@ -229,7 +265,7 @@ func (c *Client) messageHandler(buf []byte) error {
 	}
 
 	if err := handlerData.Handler(payload); err != nil {
-		log.Printf("[tcp] message handler exception: %s", err)
+		LogErrorf("message handler exception: %s", err)
 		return err
 	}
 

@@ -48,6 +48,10 @@ type pulsarBroker struct {
 func NewBroker(opts ...broker.Option) broker.Broker {
 	options := broker.NewOptionsAndApply(opts...)
 
+	if l := broker.LoggerFromOptions(&options); l != nil {
+		SetLogger(l)
+	}
+
 	b := &pulsarBroker{
 		options:     options,
 		producers:   make(map[string]pulsar.Producer),
@@ -75,60 +79,11 @@ func (pb *pulsarBroker) Options() broker.Options {
 func (pb *pulsarBroker) Init(opts ...broker.Option) error {
 	pb.options.Apply(opts...)
 
-	pulsarOptions := pulsar.ClientOptions{
-		URL:               defaultAddr,
-		OperationTimeout:  30 * time.Second,
-		ConnectionTimeout: 30 * time.Second,
-	}
-
-	if v, ok := pb.options.Context.Value(connectionTimeoutKey{}).(time.Duration); ok {
-		pulsarOptions.OperationTimeout = v
-	}
-	if v, ok := pb.options.Context.Value(operationTimeoutKey{}).(time.Duration); ok {
-		pulsarOptions.ConnectionTimeout = v
-	}
-	if v, ok := pb.options.Context.Value(listenerNameKey{}).(string); ok {
-		pulsarOptions.ListenerName = v
-	}
-	if v, ok := pb.options.Context.Value(maxConnectionsPerBrokerKey{}).(int); ok {
-		pulsarOptions.MaxConnectionsPerBroker = v
-	}
-	if v, ok := pb.options.Context.Value(customMetricsLabelsKey{}).(map[string]string); ok {
-		pulsarOptions.CustomMetricsLabels = v
-	}
-
-	var enableTLS = false
-	if v, ok := pb.options.Context.Value(tlsKey{}).(tlsConfig); ok {
-		pulsarOptions.TLSTrustCertsFilePath = v.CaCertsPath
-		if v.ClientCertPath != "" && v.ClientKeyPath != "" {
-			pulsarOptions.Authentication = pulsar.NewAuthenticationTLS(v.ClientCertPath, v.ClientKeyPath)
-		}
-		pulsarOptions.TLSAllowInsecureConnection = v.AllowInsecureConnection
-		pulsarOptions.TLSValidateHostname = v.ValidateHostname
-
-		enableTLS = true
-	}
-
-	var cAddrs []string
-	for _, addr := range pb.options.Addrs {
-		if len(addr) == 0 {
-			continue
-		}
-		addr = refitUrl(addr, enableTLS)
-		cAddrs = append(cAddrs, addr)
-	}
-	if len(cAddrs) == 0 {
-		cAddrs = []string{defaultAddr}
-	}
-	pb.options.Addrs = cAddrs
-	pulsarOptions.URL = cAddrs[0]
-
-	var err error
-	pb.client, err = pulsar.NewClient(pulsarOptions)
+	client, err := pb.newClient()
 	if err != nil {
-		LogErrorf("Could not instantiate Pulsar client: %v", err)
 		return err
 	}
+	pb.client = client
 
 	if len(pb.options.Tracings) > 0 {
 		pb.producerTracer = otlp.NewTracer(trace.SpanKindProducer, SpanNameProducer, pb.options.Tracings...)
@@ -145,6 +100,17 @@ func (pb *pulsarBroker) Connect() error {
 		return nil
 	}
 	pb.RUnlock()
+
+	// Disconnect 会关闭 client；重连时重建，而不是只翻标志位
+	if pb.client == nil {
+		client, err := pb.newClient()
+		if err != nil {
+			return err
+		}
+		pb.Lock()
+		pb.client = client
+		pb.Unlock()
+	}
 
 	pb.Lock()
 	pb.connected = true
@@ -167,17 +133,19 @@ func (pb *pulsarBroker) Disconnect() error {
 	for _, p := range pb.producers {
 		p.Close()
 	}
+	pb.producers = make(map[string]pulsar.Producer)
 
 	pb.subscribers.Clear()
 
 	pb.client.Close()
+	pb.client = nil // 置 nil：Connect 据此重建 client（否则重连拿到已关闭实例）
 
 	pb.connected = false
 	return nil
 }
 
 func (pb *pulsarBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
-	return nil, errors.New("not implemented")
+	return broker.GenericRequest(ctx, pb, topic, msg, opts...)
 }
 
 func (pb *pulsarBroker) Publish(ctx context.Context, topic string, msg *broker.Message, opts ...broker.PublishOption) error {
@@ -293,7 +261,7 @@ func (pb *pulsarBroker) publish(ctx context.Context, topic string, msg *broker.M
 
 	var err error
 	var messageId pulsar.MessageID
-	messageId, err = producer.Send(pb.options.Context, &pulsarMsg)
+	messageId, err = producer.Send(ctx, &pulsarMsg)
 	if err != nil {
 		LogErrorf("send message error: %s\n", err)
 		switch cached {
@@ -308,10 +276,13 @@ func (pb *pulsarBroker) publish(ctx context.Context, topic string, msg *broker.M
 			if err != nil {
 				break
 			}
-			if _, err = producer.Send(pb.options.Context, &pulsarMsg); err == nil {
+			if _, err = producer.Send(ctx, &pulsarMsg); err == nil {
 				pb.Lock()
 				pb.producers[topic] = producer
 				pb.Unlock()
+			} else {
+				// 重试仍失败：关闭临时 producer，避免泄漏
+				producer.Close()
 			}
 		}
 	}
@@ -327,6 +298,10 @@ func (pb *pulsarBroker) publish(ctx context.Context, topic string, msg *broker.M
 }
 
 func (pb *pulsarBroker) Subscribe(topic string, handler broker.Handler, binder broker.Binder, opts ...broker.SubscribeOption) (broker.Subscriber, error) {
+	if pb.client == nil {
+		return nil, errors.New("pulsar: not initialized (call Init first)")
+	}
+
 	options := broker.SubscribeOptions{
 		Context: context.Background(),
 		AutoAck: true,
@@ -341,9 +316,13 @@ func (pb *pulsarBroker) Subscribe(topic string, handler broker.Handler, binder b
 	}
 
 	pulsarOptions := pulsar.ConsumerOptions{
-		Topic:            topic,
-		SubscriptionName: "my-subscription",
+		Topic: topic,
+		// 优先级：WithSubscriptionName > SubscribeOptions.Queue（标准选项）> 默认值
+		SubscriptionName: options.Queue,
 		Type:             pulsar.Shared,
+	}
+	if pulsarOptions.SubscriptionName == "" {
+		pulsarOptions.SubscriptionName = "my-subscription"
 	}
 
 	channel := make(chan pulsar.ConsumerMessage, 100)
@@ -392,19 +371,26 @@ func (pb *pulsarBroker) Subscribe(topic string, handler broker.Handler, binder b
 	}
 
 	go func() {
-		var err error
-		var m broker.Message
 		for cm := range channel {
+			// 每条消息独立 Message：复用会让异步持有 publication 的 handler 读到被覆盖的数据
+			m := broker.Message{
+				Headers: cm.Properties(),
+			}
 			p := &publication{topic: cm.Topic(), reader: sub.reader, msg: &m, pulsarMsg: &cm.Message, ctx: options.Context}
-			m.Headers = cm.Properties()
 
 			ctx, span := pb.startConsumerSpan(sub.options.Context, &cm)
 
 			if binder != nil {
 				m.Body = binder()
 
-				if err = broker.Unmarshal(pb.options.Codec, cm.Payload(), &m.Body); err != nil {
+				if err := broker.Unmarshal(pb.options.Codec, cm.Payload(), &m.Body); err != nil {
+					// 反序列化失败：Nack 触发重投并通知 ErrorHandler
 					LogErrorf("unmarshal message failed: %v", err)
+					p.err = err
+					if eh := pb.options.ErrorHandler; eh != nil {
+						_ = eh(ctx, p)
+					}
+					p.nack()
 					pb.finishConsumerSpan(ctx, span, err)
 					continue
 				}
@@ -412,24 +398,35 @@ func (pb *pulsarBroker) Subscribe(topic string, handler broker.Handler, binder b
 				m.Body = cm.Payload()
 			}
 
-			if err = sub.handler(ctx, p); err != nil {
+			if err := sub.handler(ctx, p); err != nil {
+				// 处理失败：Nack 重投（原先不 Ack 不 Nack，默认配置下消息会永久滞留丢失）
 				p.err = err
 				LogErrorf("handle message failed: %v", err)
+				if eh := pb.options.ErrorHandler; eh != nil {
+					_ = eh(ctx, p)
+				}
+				p.nack()
 				pb.finishConsumerSpan(ctx, span, err)
 				continue
 			}
 
 			if sub.options.AutoAck {
-				if err = p.Ack(); err != nil {
+				if err := p.Ack(); err != nil {
 					p.err = err
 					LogErrorf("unable to commit msg: %v", err)
 				}
 			}
 
-			pb.finishConsumerSpan(ctx, span, err)
+			pb.finishConsumerSpan(ctx, span, nil)
 		}
 	}()
 
+	if old := pb.subscribers.Get(topic); old != nil {
+		// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
+		}
+	}
 	pb.subscribers.Add(topic, sub)
 
 	return sub, nil
@@ -503,4 +500,63 @@ func (pb *pulsarBroker) finishConsumerSpan(ctx context.Context, span trace.Span,
 	}
 
 	pb.consumerTracer.End(ctx, span, err)
+}
+
+// newClient 组装 ClientOptions 并创建 Pulsar 客户端。
+// 独立成函数：Connect 时可复用（Disconnect 关闭 client 后支持重连）。
+func (pb *pulsarBroker) newClient() (pulsar.Client, error) {
+	pulsarOptions := pulsar.ClientOptions{
+		URL:               defaultAddr,
+		OperationTimeout:  30 * time.Second,
+		ConnectionTimeout: 30 * time.Second,
+	}
+
+	if v, ok := pb.options.Context.Value(connectionTimeoutKey{}).(time.Duration); ok {
+		pulsarOptions.ConnectionTimeout = v
+	}
+	if v, ok := pb.options.Context.Value(operationTimeoutKey{}).(time.Duration); ok {
+		pulsarOptions.OperationTimeout = v
+	}
+	if v, ok := pb.options.Context.Value(listenerNameKey{}).(string); ok {
+		pulsarOptions.ListenerName = v
+	}
+	if v, ok := pb.options.Context.Value(maxConnectionsPerBrokerKey{}).(int); ok {
+		pulsarOptions.MaxConnectionsPerBroker = v
+	}
+	if v, ok := pb.options.Context.Value(customMetricsLabelsKey{}).(map[string]string); ok {
+		pulsarOptions.CustomMetricsLabels = v
+	}
+
+	var enableTLS = false
+	if v, ok := pb.options.Context.Value(tlsKey{}).(tlsConfig); ok {
+		pulsarOptions.TLSTrustCertsFilePath = v.CaCertsPath
+		if v.ClientCertPath != "" && v.ClientKeyPath != "" {
+			pulsarOptions.Authentication = pulsar.NewAuthenticationTLS(v.ClientCertPath, v.ClientKeyPath)
+		}
+		pulsarOptions.TLSAllowInsecureConnection = v.AllowInsecureConnection
+		pulsarOptions.TLSValidateHostname = v.ValidateHostname
+
+		enableTLS = true
+	}
+
+	var cAddrs []string
+	for _, addr := range pb.options.Addrs {
+		if len(addr) == 0 {
+			continue
+		}
+		addr = refitUrl(addr, enableTLS)
+		cAddrs = append(cAddrs, addr)
+	}
+	if len(cAddrs) == 0 {
+		cAddrs = []string{defaultAddr}
+	}
+	pb.options.Addrs = cAddrs
+	pulsarOptions.URL = cAddrs[0]
+
+	client, err := pulsar.NewClient(pulsarOptions)
+	if err != nil {
+		LogErrorf("Could not instantiate Pulsar client: %v", err)
+		return nil, err
+	}
+	return client, nil
 }

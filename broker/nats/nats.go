@@ -54,6 +54,10 @@ type natsBroker struct {
 func NewBroker(opts ...broker.Option) broker.Broker {
 	options := broker.NewOptionsAndApply(opts...)
 
+	if l := broker.LoggerFromOptions(&options); l != nil {
+		SetLogger(l)
+	}
+
 	b := &natsBroker{
 		options:     options,
 		subscribers: broker.NewSubscriberSyncMap(),
@@ -135,11 +139,13 @@ func (b *natsBroker) setOption(opts ...broker.Option) {
 	if b.options.TLSConfig == nil {
 		b.options.TLSConfig = b.natsOpts.TLSConfig
 	}
-	b.setAddrs(b.options.Addrs)
+	b.options.Addrs = b.setAddrs(b.options.Addrs)
 
 	if b.options.Context.Value(drainConnectionKey{}) != nil {
 		b.drain = true
-		b.closeCh = make(chan error)
+		// 有缓冲：closeCh 没有读取方，无缓冲会让 onClose/onDisconnectedError
+		// 回调与持锁的 Disconnect 永久阻塞
+		b.closeCh = make(chan error, 8)
 		b.natsOpts.ClosedCB = b.onClose
 		b.natsOpts.AsyncErrorCB = b.onAsyncError
 		b.natsOpts.DisconnectedErrCB = b.onDisconnectedError
@@ -308,7 +314,12 @@ func (b *natsBroker) Subscribe(topic string, handler broker.Handler, binder brok
 
 		if binder != nil {
 			if b.options.Codec.Name() == kProto.Name {
-				m.Body = binder().(proto.Message)
+				if pm, pmOK := binder().(proto.Message); pmOK {
+					m.Body = pm
+				} else {
+					// binder 未返回 proto.Message：退回原始字节，避免断言 panic
+					m.Body = msg.Data
+				}
 			} else {
 				m.Body = binder()
 			}
@@ -331,7 +342,7 @@ func (b *natsBroker) Subscribe(topic string, handler broker.Handler, binder brok
 			pub.err = errSub
 			LogErrorf("handle message failed: %v", errSub)
 			if eh != nil {
-				_ = eh(b.options.Context, pub)
+				_ = eh(ctx, pub)
 			}
 
 			b.finishConsumerSpan(ctx, span, errSub)
@@ -363,12 +374,21 @@ func (b *natsBroker) Subscribe(topic string, handler broker.Handler, binder brok
 
 	subs.s = sub
 
+	if old := b.subscribers.Get(topic); old != nil {
+		// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", topic, uerr)
+		}
+	}
 	b.subscribers.Add(topic, subs)
 
 	return subs, nil
 }
 
 func (b *natsBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
+	if msg == nil {
+		return nil, broker.ErrRequestMessageNil
+	}
 	buf, err := broker.Marshal(b.options.Codec, msg.Body)
 	if err != nil {
 		return nil, err
@@ -398,7 +418,11 @@ func (b *natsBroker) request(ctx context.Context, topic string, msg *broker.Mess
 	m := natsGo.NewMsg(topic)
 	m.Data = msg.BodyBytes()
 
+	// 标准 RequestOptions.Timeout 优先（WithRequestTimeout），专有 key 作为兜底
 	var timeout = time.Second * 2
+	if options.Timeout > 0 {
+		timeout = options.Timeout
+	}
 	if v, ok := options.Context.Value(requestTimeoutKey{}).(time.Duration); ok && v > 0 {
 		timeout = v
 	}
@@ -417,10 +441,17 @@ func (b *natsBroker) request(ctx context.Context, topic string, msg *broker.Mess
 
 	b.finishProducerSpan(ctx, span, err)
 
-	return broker.NewMessage(res, broker.WithMsg(res)), err
+	if err != nil {
+		return nil, err
+	}
+
+	return broker.NewMessage(res, broker.WithMsg(res)), nil
 }
 
 func (b *natsBroker) onClose(_ *natsGo.Conn) {
+	if !b.drain {
+		return
+	}
 	b.closeCh <- nil
 }
 
@@ -431,6 +462,10 @@ func (b *natsBroker) onAsyncError(_ *natsGo.Conn, _ *natsGo.Subscription, err er
 }
 
 func (b *natsBroker) onDisconnectedError(_ *natsGo.Conn, err error) {
+	if !b.drain {
+		// 普通瞬断由 SDK 自动重连，不上报（避免缓冲被刷满阻塞回调 goroutine）
+		return
+	}
 	b.closeCh <- err
 }
 

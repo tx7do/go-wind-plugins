@@ -22,7 +22,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 
 	"github.com/apache/thrift/lib/go/thrift"
@@ -90,8 +89,14 @@ func (s *Server) Start(ctx context.Context) error {
 		return ErrInvalidProtocol
 	}
 
-	cfg := &thrift.TConfiguration{
-		TLSConfig: &tls.Config{InsecureSkipVerify: true},
+	// TLS：用户通过 WithTLSConfig 提供的配置优先；未提供时才回退默认（向后兼容）
+	cfg := &thrift.TConfiguration{}
+	if s.tlsConfig != nil {
+		cfg.TLSConfig = s.tlsConfig
+	} else {
+		cfg.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
 	}
 
 	transportFactory := createTransportFactory(cfg, s.buffered, s.framed, s.bufferSize)
@@ -106,7 +111,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.server = thrift.NewTSimpleServer4(s.processor, serverTransport, transportFactory, protocolFactory)
 
-	fmt.Printf("[%s] server listening on: %s\n", KindThrift, s.addr)
+	LogInfof("server listening on: %s", s.addr)
 
 	// 在 goroutine 中 Serve，通过 ctx 实现优雅关闭
 	errChan := make(chan error, 1)

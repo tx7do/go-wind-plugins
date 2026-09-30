@@ -66,6 +66,17 @@ func NewClient(opts ...ClientOption) *Client {
 		remoteTracks:     make(map[string]*webrtc.TrackRemote),
 	}
 
+	// 内置信令处理器：处理服务端下发的重协商 Offer（服务端新增下行轨道时）。
+	// 在用户 opts 之前注册：RegisterMessageHandler 先注册者优先，用户无法覆盖
+	c.RegisterMessageHandler(MsgTypeSignalRenegotiation,
+		func(payload MessagePayload) error {
+			return c.handleSignalRenegotiation(payload)
+		},
+		func() any {
+			return &SignalRenegotiationMsg{}
+		},
+	)
+
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -159,8 +170,11 @@ func (c *Client) Connect() error {
 
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		switch state {
-		case webrtc.PeerConnectionStateClosed, webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateDisconnected:
+		case webrtc.PeerConnectionStateClosed, webrtc.PeerConnectionStateFailed:
 			_ = c.Disconnect()
+		case webrtc.PeerConnectionStateDisconnected:
+			// 瞬时态：ICE 可能自愈恢复 Connected，不做永久断开
+			LogWarn("peer connection disconnected, waiting for ICE recovery")
 		}
 	})
 
@@ -377,6 +391,11 @@ func (c *Client) unmarshalMessage(buf []byte) (*ClientHandlerData, MessagePayloa
 	handler, ok := c.messageHandlers[messageType]
 	c.handlerMu.RUnlock()
 	if !ok {
+		// 内置广播类型无 handler 时静默（服务端每次发布轨道都会广播，
+		// 未订阅该通知属正常场景，刷 error 日志是噪音）
+		if messageType == MsgTypeSignalTrackAvailable {
+			return nil, nil, nil
+		}
 		return nil, nil, fmt.Errorf("message handler not found: %d", messageType)
 	}
 
@@ -426,7 +445,101 @@ func (c *Client) AddLocalTrack(track *webrtc.TrackLocalStaticRTP) error {
 	c.localTracks[track.ID()] = track
 	c.pcMu.Unlock()
 
+	// 客户端是初始 offer 方：加轨后必须重新 offer，否则轨道不会真正协商发送
+	if err := c.negotiate(); err != nil {
+		return err
+	}
+
 	LogInfof("added local track: %s", track.ID())
+	return nil
+}
+
+// negotiate 发起重协商：创建 Offer 发送给服务端，等待服务端经内置信令通道回填 Answer
+func (c *Client) negotiate() error {
+	c.pcMu.RLock()
+	pc := c.pc
+	c.pcMu.RUnlock()
+
+	if pc == nil {
+		return errors.New("peer connection not established")
+	}
+
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		return err
+	}
+
+	gatherDone := webrtc.GatheringCompletePromise(pc)
+	if err = pc.SetLocalDescription(offer); err != nil {
+		return err
+	}
+	select {
+	case <-gatherDone:
+	case <-time.After(c.signalTimeout):
+		return errors.New("ice gathering timeout")
+	}
+
+	local := pc.LocalDescription()
+	if local == nil {
+		return errors.New("local description is nil")
+	}
+
+	return c.SendMessage(MsgTypeSignalRenegotiation, SignalRenegotiationMsg{
+		Type:  "renegotiation",
+		Offer: local,
+	})
+}
+
+// handleSignalRenegotiation 处理服务端下发的重协商信令：
+// - 携带 Offer：应用为远端描述并回 Answer（服务端新增下行轨道）
+// - 携带 Answer：应用为远端描述（服务端确认客户端上行的 Offer）
+func (c *Client) handleSignalRenegotiation(payload MessagePayload) error {
+	msg, ok := payload.(*SignalRenegotiationMsg)
+	if !ok || msg == nil {
+		return errors.New("invalid renegotiation payload")
+	}
+
+	c.pcMu.RLock()
+	pc := c.pc
+	c.pcMu.RUnlock()
+
+	if pc == nil {
+		return errors.New("peer connection not established")
+	}
+
+	if msg.Answer != nil {
+		// Answer 方向无需 gather：候选由对端 Offer 侧收集并携带
+		return pc.SetRemoteDescription(*msg.Answer)
+	}
+
+	if msg.Offer != nil {
+		if err := pc.SetRemoteDescription(*msg.Offer); err != nil {
+			return err
+		}
+		answer, err := pc.CreateAnswer(nil)
+		if err != nil {
+			return err
+		}
+		// 信令通道无 trickle，等 ICE 收敛把候选装进 SDP
+		gatherDone := webrtc.GatheringCompletePromise(pc)
+		if err = pc.SetLocalDescription(answer); err != nil {
+			return err
+		}
+		select {
+		case <-gatherDone:
+		case <-time.After(c.signalTimeout):
+			LogWarn("ice gathering timeout, sending current local description")
+		}
+
+		// gather 完成后取 pc.LocalDescription()（包含收集到的 ICE 候选）
+		local := pc.LocalDescription()
+
+		return c.SendMessage(MsgTypeSignalRenegotiation, SignalRenegotiationMsg{
+			Type:   "renegotiation",
+			Answer: local,
+		})
+	}
+
 	return nil
 }
 

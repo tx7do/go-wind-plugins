@@ -29,8 +29,10 @@ type Server struct {
 	serverName    string
 	serverVersion string
 
-	mcpServer *server.MCPServer
-	endpoint  *url.URL
+	mcpServer  *server.MCPServer
+	sseServer   *server.SSEServer
+	httpServer  *server.StreamableHTTPServer
+	endpoint    *url.URL
 
 	mcpOpts []server.ServerOption
 
@@ -131,6 +133,27 @@ func (s *Server) Stop(ctx context.Context) error {
 
 	s.started.Store(false)
 
+	// 停掉 SSE/HTTP 服务本体：否则 Stop 后端口仍被占用，
+	// 再次 Start 会在同地址起第二个实例
+	s.mu.Lock()
+	sseServer := s.sseServer
+	httpServer := s.httpServer
+	s.sseServer = nil
+	s.httpServer = nil
+	s.setErrLocked(nil) // 清 sticky err，避免瞬时错误导致后续 Start 永久失败
+	s.mu.Unlock()
+
+	if sseServer != nil {
+		if err := sseServer.Shutdown(ctx); err != nil {
+			LogErrorf("sse server shutdown failed: %s", err.Error())
+		}
+	}
+	if httpServer != nil {
+		if err := httpServer.Shutdown(ctx); err != nil {
+			LogErrorf("http server shutdown failed: %s", err.Error())
+		}
+	}
+
 	s.mu.RLock()
 	err := s.err
 	s.mu.RUnlock()
@@ -141,7 +164,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		LogInfo("server stopped.")
 	}
 
-	return s.err
+	return err
 }
 
 func (s *Server) Endpoint() string {
@@ -194,21 +217,27 @@ func (s *Server) startMCPServer() error {
 	switch s.serverType {
 	case ServerTypeStdio:
 		if err := server.ServeStdio(s.mcpServer); err != nil {
-			LogErrorf("MCP server start failed: %v", err)
+			LogErrorf("MCP server start failed: %s", err.Error())
 			return errors.New("start MCP server: " + err.Error())
 		}
 
 	case ServerTypeSSE:
 		sseServer := server.NewSSEServer(s.mcpServer)
+		// 保存句柄供 Stop 关闭（此前是局部变量，Stop 后端口仍在服务）
+		s.sseServer = sseServer
 		if err := sseServer.Start(s.serverAddr); err != nil {
-			LogErrorf("Server failed to start: %v", err)
+			s.sseServer = nil
+			// 不能用 Fatalf：会 os.Exit 杀死整个应用进程
+			LogErrorf("MCP server start failed: %s", err.Error())
 			return errors.New("start MCP server: " + err.Error())
 		}
 
 	case ServerTypeHTTP:
 		httpServer := server.NewStreamableHTTPServer(s.mcpServer)
+		s.httpServer = httpServer
 		if err := httpServer.Start(s.serverAddr); err != nil {
-			LogErrorf("Server failed to start: %v", err)
+			s.httpServer = nil
+			LogErrorf("MCP server start failed: %s", err.Error())
 			return errors.New("start MCP server: " + err.Error())
 		}
 
@@ -243,4 +272,9 @@ func (s *Server) setErr(err error) {
 	s.mu.Lock()
 	s.err = errors.Join(s.err, err)
 	s.mu.Unlock()
+}
+
+// setErrLocked 在已持锁情况下设置/清空错误（nil 清空 sticky err，避免 Start 永久失败）
+func (s *Server) setErrLocked(err error) {
+	s.err = err
 }

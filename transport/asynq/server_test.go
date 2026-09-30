@@ -314,3 +314,47 @@ func TestWaitResultTask(t *testing.T) {
 
 	t.Logf("Wait for task result...")
 }
+
+// TestPeriodicTaskSameTypeName 验证共用同一 typeName 的多条定时任务
+// 能够被独立跟踪与移除：
+//   - RemovePeriodicTaskByID 按 NewPeriodicTask 返回的 entryID 移除任意
+//     单条任务，即使其 typeName 已被后续注册覆盖；
+//   - RemovePeriodicTask（按 typeName）移除最新一条，并真正清理
+//     entryIDs 映射（回归覆盖曾经的空操作清理缺陷）。
+func TestPeriodicTaskSameTypeName(t *testing.T) {
+	srv := NewServer()
+	assert.Nil(t, srv.createAsynqScheduler())
+
+	const typeName = "test_periodic_same_typename"
+	task := asynq.NewTask(typeName, nil)
+
+	// 两条共用同一 typeName 的定时任务：底层 scheduler 持有两个 entry，
+	// 而 entryIDs 只保留最新的一条。
+	id1, err := srv.scheduler.Register("*/5 * * * *", task)
+	assert.Nil(t, err)
+	srv.addPeriodicTaskEntryID(typeName, id1)
+
+	id2, err := srv.scheduler.Register("*/7 * * * *", task)
+	assert.Nil(t, err)
+	srv.addPeriodicTaskEntryID(typeName, id2)
+
+	assert.NotEqual(t, id1, id2)
+	assert.Equal(t, id2, srv.QueryPeriodicTaskEntryID(typeName))
+
+	// 被覆盖的 entry 仍在 scheduler 中触发，只能通过其 entryID 移除。
+	assert.Nil(t, srv.RemovePeriodicTaskByID(id1))
+	assert.NotNil(t, srv.scheduler.Unregister(id1)) // 已被注销
+	assert.Equal(t, id2, srv.QueryPeriodicTaskEntryID(typeName))
+
+	// 按 typeName 移除最新一条并清理映射。
+	assert.Nil(t, srv.RemovePeriodicTask(typeName))
+	assert.Equal(t, "", srv.QueryPeriodicTaskEntryID(typeName))
+	assert.NotNil(t, srv.scheduler.Unregister(id2)) // 已被注销
+
+	// RemovePeriodicTaskByID 同样会清理持有该 entryID 的映射项。
+	id3, err := srv.scheduler.Register("*/9 * * * *", task)
+	assert.Nil(t, err)
+	srv.addPeriodicTaskEntryID(typeName, id3)
+	assert.Nil(t, srv.RemovePeriodicTaskByID(id3))
+	assert.Equal(t, "", srv.QueryPeriodicTaskEntryID(typeName))
+}

@@ -66,6 +66,10 @@ type rocketmqBroker struct {
 func NewBroker(opts ...broker.Option) broker.Broker {
 	rocketmqOptions := broker.NewOptionsAndApply(opts...)
 
+	if l := broker.LoggerFromOptions(&rocketmqOptions); l != nil {
+		SetLogger(l)
+	}
+
 	return &rocketmqBroker{
 		options:           rocketmqOptions,
 		retryCount:        2,
@@ -167,10 +171,13 @@ func (b *rocketmqBroker) Init(opts ...broker.Option) error {
 		case log.LevelInfo:
 			strLevel = "info"
 		default:
-			panic("unhandled default case")
+			// 未知级别回退到 info，而不是 panic
+			strLevel = "info"
 		}
 		_ = os.Setenv(rmqClient.CLIENT_LOG_LEVEL, strLevel)
 	}
+
+	rocketmqOption.WarnUnsupportedKeysOnce("v5", b.options.Context, rocketmqOption.V5UnsupportedBrokerKeys())
 
 	if len(b.options.Tracings) > 0 {
 		b.producerTracer = otlp.NewTracer(trace.SpanKindProducer, SpanNameProducer, b.options.Tracings...)
@@ -196,15 +203,14 @@ func (b *rocketmqBroker) Connect() error {
 }
 
 func (b *rocketmqBroker) Disconnect() error {
-	b.RLock()
-	if !b.connected {
-		b.RUnlock()
-		return nil
-	}
-	b.RUnlock()
-
+	// 两段式检查（先 RLock 检查再 Lock 执行）存在 TOCTOU：
+	// 并发两次 Disconnect 会对已关闭的 done 再次 close 导致 panic，必须全程持锁复查
 	b.Lock()
 	defer b.Unlock()
+
+	if !b.connected {
+		return nil
+	}
 	close(b.done)
 
 	for _, p := range b.producers {
@@ -224,7 +230,7 @@ func (b *rocketmqBroker) Disconnect() error {
 }
 
 func (b *rocketmqBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
-	return nil, errors.New("not implemented")
+	return broker.GenericRequest(ctx, b, topic, msg, opts...)
 }
 
 func (b *rocketmqBroker) Publish(ctx context.Context, topic string, msg *broker.Message, opts ...broker.PublishOption) error {
@@ -290,6 +296,7 @@ func (b *rocketmqBroker) publish(ctx context.Context, topic string, msg *broker.
 	if v, ok := rocketmqOptions.Context.Value(rocketmqOption.KeysKey{}).([]string); ok {
 		rMsg.SetKeys(v...)
 	}
+	rocketmqOption.WarnUnsupportedKeysOnce("v5", rocketmqOptions.Context, rocketmqOption.V5UnsupportedPublishKeys())
 	if v, ok := rocketmqOptions.Context.Value(rocketmqOption.DeliveryTimestampKey{}).(time.Time); ok {
 		rMsg.SetDelayTimestamp(v)
 	}
@@ -389,6 +396,7 @@ func (b *rocketmqBroker) Subscribe(topic string, handler broker.Handler, binder 
 	if len(b.options.SubscriberMiddlewares) > 0 {
 		handler = broker.ChainSubscriberMiddleware(handler, b.options.SubscriberMiddlewares)
 	}
+	rocketmqOption.WarnUnsupportedKeysOnce("v5", rocketmqOptions.Context, rocketmqOption.V5UnsupportedSubscribeKeys())
 
 	if b.consumer == nil {
 		c, err := b.createConsumer(rocketmqOptions)
@@ -505,6 +513,12 @@ func (b *rocketmqBroker) run() {
 		// receive the message
 		var messages []*rmqClient.MessageView
 		if messages, err = b.consumer.Receive(ctx, b.maxMessageNum, b.invisibleDuration); err != nil {
+			// 断连等持续性错误下退避，避免空转打满 CPU 并轰炸服务端
+			select {
+			case <-b.done:
+				return
+			case <-time.After(b.receiveInterval):
+			}
 			continue
 		}
 

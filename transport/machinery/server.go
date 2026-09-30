@@ -3,8 +3,10 @@ package machinery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/RichardKnop/machinery/v2"
 	"github.com/RichardKnop/machinery/v2/config"
@@ -47,7 +49,10 @@ type Server struct {
 	err     error
 
 	machineryServer *machinery.Server
-	cfg             *config.Config
+	worker          *machinery.Worker
+	workerErrChan   chan error
+
+	cfg *config.Config
 
 	brokerOption   brokerOption
 	backendOption  backendOption
@@ -63,6 +68,9 @@ func NewServer(opts ...ServerOption) *Server {
 		cfg: &config.Config{
 			DefaultQueue:    "wind_machinery_queue",
 			ResultsExpireIn: 3600,
+
+			// 进程信号由上层应用统一处理，worker 不自行捕获 SIGINT/SIGTERM
+			NoUnixSignals: true,
 
 			AMQP: &config.AMQPConfig{},
 			SQS:  &config.SQSConfig{},
@@ -111,7 +119,9 @@ func (s *Server) init(opts ...ServerOption) {
 
 	s.installLogger()
 
-	s.createMachineryServer()
+	if err := s.createMachineryServer(); err != nil {
+		s.err = err
+	}
 }
 
 func (s *Server) Name() string {
@@ -171,11 +181,11 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
-	if err := s.newWorker(
+	if err := s.startWorker(
 		s.consumerOption.consumerTag,
 		s.consumerOption.concurrency,
 		s.consumerOption.queue,
-	); err != nil && !errors.Is(err, machinery.ErrWorkerQuitGracefully) {
+	); err != nil {
 		return err
 	}
 
@@ -192,7 +202,27 @@ func (s *Server) Stop(ctx context.Context) error {
 
 	s.started.Store(false)
 
-	s.machineryServer = nil
+	if s.worker != nil {
+		// 通知 worker 退出消费循环
+		s.worker.Quit()
+
+		// 等待 worker 消费循环收敛，超时则放弃等待
+		if s.workerErrChan != nil {
+			select {
+			case err := <-s.workerErrChan:
+				if err != nil && !errors.Is(err, machinery.ErrWorkerQuitGracefully) {
+					LogErrorf("worker exited with error: %s", err.Error())
+				}
+			case <-ctx.Done():
+				LogWarn("wait worker stop timeout")
+			case <-time.After(10 * time.Second):
+				LogWarn("wait worker stop timeout")
+			}
+		}
+		s.worker = nil
+		s.workerErrChan = nil
+	}
+
 	s.err = nil
 
 	LogInfo("server stopped.")
@@ -209,7 +239,7 @@ func (s *Server) installLogger() {
 	machineryLog.SetFatal(newLogger(log.LevelError))
 }
 
-func (s *Server) createMachineryServer() {
+func (s *Server) createMachineryServer() error {
 	var broker ifaceBroker.Broker
 	var backend ifaceBackend.Backend
 	var lock ifaceLock.Lock
@@ -269,6 +299,12 @@ func (s *Server) createMachineryServer() {
 		}
 	}
 
+	// 用户显式配置了 broker 但创建失败时，不应静默降级为 eager
+	// （eager = 进程内同步执行，任务零持久化零重试，机器故障即任务丢失）
+	if s.cfg.Broker != "" && broker == nil {
+		return fmt.Errorf("broker address %q is configured but no broker was created (check brokerType)", s.cfg.Broker)
+	}
+
 	if broker == nil {
 		broker = eagerBroker.New()
 	}
@@ -280,16 +316,27 @@ func (s *Server) createMachineryServer() {
 	}
 
 	s.machineryServer = machinery.NewServer(s.cfg, broker, backend, lock)
+	return nil
 }
 
 func (s *Server) registerTask(name string, handler any) error {
+	if s.machineryServer == nil {
+		return errors.New("machinery server not initialized (broker creation may have failed)")
+	}
 	if err := s.machineryServer.RegisterTask(name, handler); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Server) newWorker(consumerTag string, concurrency int, queue string) error {
+// startWorker 以非阻塞方式启动 worker。
+// machinery 的 worker.Launch() 会阻塞到 worker 退出，不能在 Start 里同步调用，
+// 否则 Start 永不返回。
+func (s *Server) startWorker(consumerTag string, concurrency int, queue string) error {
+	if s.machineryServer == nil {
+		return errors.New("machinery server is nil")
+	}
+
 	worker := s.machineryServer.NewCustomQueueWorker(consumerTag, concurrency, queue)
 	if worker == nil {
 		return errors.New("create worker failed")
@@ -299,7 +346,16 @@ func (s *Server) newWorker(consumerTag string, concurrency int, queue string) er
 
 	})
 
-	return worker.Launch()
+	// worker 退出时向 errChan 发送最终错误；cap 2 兜底 NoUnixSignals=false 时
+	// 信号路径可能的额外发送，避免发送 goroutine 永久阻塞
+	errChan := make(chan error, 2)
+
+	worker.LaunchAsync(errChan)
+
+	s.worker = worker
+	s.workerErrChan = errChan
+
+	return nil
 }
 
 func (s *Server) newTask(ctx context.Context, cronSpec, lockName, typeName string, opts ...TaskOption) error {

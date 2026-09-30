@@ -3,6 +3,7 @@ package sqs
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -59,12 +60,7 @@ func (s *subscriber) IsClosed() bool {
 }
 
 // recv is the main receive loop for SQS messages using long polling.
-func (s *subscriber) recv(handler broker.Handler, binder broker.Binder, opts recvOpts) {
-	ctx, cancel := context.WithCancel(context.Background())
-	s.Lock()
-	s.cancel = cancel
-	s.Unlock()
-
+func (s *subscriber) recv(ctx context.Context, handler broker.Handler, binder broker.Binder, opts recvOpts) {
 	defer func() {
 		LogInfof("subscriber stopped, topic: %s", s.topic)
 	}()
@@ -94,6 +90,12 @@ func (s *subscriber) recv(handler broker.Handler, binder broker.Binder, opts rec
 				return
 			}
 			LogErrorf("receive message failed: %v", err)
+			// 持续性错误（队列不存在/权限等）下退避，避免热循环打爆 API
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 
@@ -127,7 +129,12 @@ func (s *subscriber) processMessage(ctx context.Context, handler broker.Handler,
 		if binder != nil {
 			m.Body = binder()
 			if err := broker.Unmarshal(s.b.options.Codec, body, &m.Body); err != nil {
+				// 毒消息：通知 ErrorHandler；不 Ack 等 visibility 超时重投
 				LogErrorf("unmarshal message failed: %v", err)
+				p := &publication{topic: s.topic, msg: &m, sqsMsg: &sqsMsg, client: s.client, queueUrl: s.queueUrl, err: err}
+				if eh := s.b.options.ErrorHandler; eh != nil {
+					_ = eh(s.options.Context, p)
+				}
 				return
 			}
 		} else {
@@ -146,6 +153,9 @@ func (s *subscriber) processMessage(ctx context.Context, handler broker.Handler,
 	if err := handler(ctx, p); err != nil {
 		p.err = err
 		LogErrorf("handle message failed: %v", err)
+		if eh := s.b.options.ErrorHandler; eh != nil {
+			_ = eh(ctx, p)
+		}
 		return
 	}
 

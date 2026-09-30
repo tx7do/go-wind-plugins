@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -64,8 +63,10 @@ type Server struct {
 
 func NewServer(opts ...Option) *Server {
 	srv := &Server{
-		address:         ":0",
-		timeout:         1 * time.Second,
+		address: ":0",
+		// timeout 同时作为会话空闲读写超时；默认关闭（0），避免误杀长连接，
+		// 需要回收半开连接时通过 WithTimeout 显式开启
+		timeout:         0,
 		dataShards:      10,
 		parityShards:    3,
 		sessionManager:  NewSessionManager(nil),
@@ -119,7 +120,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.running = true
 	s.stateMu.Unlock()
 
-	log.Printf("[kcp] server listening on: %s", listener.Addr().String())
+	LogInfof("server listening on: %s", listener.Addr().String())
 
 	go s.doAccept()
 
@@ -138,7 +139,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.closeAllSessions()
 
-	log.Println("[kcp] server stopped")
+	LogInfof("server stopped")
 	return nil
 }
 
@@ -161,7 +162,7 @@ func (s *Server) Stop(_ context.Context) error {
 
 	s.closeAllSessions()
 
-	log.Println("[kcp] server stopped")
+	LogInfof("server stopped")
 	return err
 }
 
@@ -222,7 +223,7 @@ func RegisterServerMessageHandler[T any](srv *Server, messageType NetMessageType
 			case *T:
 				return handler(sessionId, t)
 			default:
-				log.Printf("[kcp] invalid payload struct type: %T", t)
+				LogError("invalid payload struct type:", t)
 				return errors.New("invalid payload struct type")
 			}
 		},
@@ -289,7 +290,7 @@ func (s *Server) SendMessage(sessionId SessionID, messageType NetMessageType, me
 func (s *Server) Broadcast(messageType NetMessageType, message NetMessagePayload) {
 	buf, err := s.marshalNetPacket(messageType, message)
 	if err != nil {
-		log.Printf("[kcp] marshal message exception: %v", err)
+		LogError("marshal message exception:", err)
 		return
 	}
 
@@ -322,7 +323,7 @@ func (s *Server) unmarshalNetPacket(buf []byte) (*MessageHandlerData, NetMessage
 func (s *Server) defaultUnmarshalNetPacket(buf []byte) (handler *MessageHandlerData, payload NetMessagePayload, err error) {
 	var msg NetPacket
 	if err = msg.Unmarshal(buf); err != nil {
-		log.Printf("[kcp] decode message exception: %s", err)
+		LogErrorf("decode message exception: %s", err)
 		return
 	}
 
@@ -334,7 +335,7 @@ func (s *Server) defaultUnmarshalNetPacket(buf []byte) (handler *MessageHandlerD
 		payload = msg.Payload
 	} else {
 		if err = s.codec.Unmarshal(msg.Payload, payload); err != nil {
-			log.Printf("[kcp] unmarshal message exception: %s", err)
+			LogErrorf("unmarshal message exception: %s", err)
 			return
 		}
 	}
@@ -362,7 +363,7 @@ func (s *Server) defaultHandleSocketRawData(sessionId SessionID, buf []byte) err
 
 	handler, payload, err := s.unmarshalNetPacket(buf)
 	if err != nil {
-		log.Printf("[kcp] unmarshal message failed: %s", err)
+		LogErrorf("unmarshal message failed: %s", err)
 		if span != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
@@ -373,7 +374,7 @@ func (s *Server) defaultHandleSocketRawData(sessionId SessionID, buf []byte) err
 	}
 
 	if err = handler.Handler(sessionId, payload); err != nil {
-		log.Printf("[kcp] message handler failed: %s", err)
+		LogErrorf("message handler failed: %s", err)
 		if span != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
@@ -414,11 +415,12 @@ func (s *Server) doAccept() {
 				return
 			}
 
-			log.Printf("[kcp] accept connection failed: %s", err)
+			LogErrorf("accept connection failed: %s", err)
 			continue
 		}
 
 		session := NewSession(conn, s)
+		session.idleTimeout = s.timeout
 		s.sessionManager.addSession(session)
 		session.Listen()
 	}

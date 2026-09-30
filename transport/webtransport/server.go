@@ -41,6 +41,9 @@ type Server struct {
 	ctxCancel context.CancelFunc
 	refCount  sync.WaitGroup
 
+	running atomic.Bool
+
+	handlersMu      sync.RWMutex
 	messageHandlers MessageHandlerMap
 	connectHandler  ConnectHandler
 	codec           encoding.Codec
@@ -48,6 +51,71 @@ type Server struct {
 	middlewares []Middleware
 
 	sessionCount atomic.Int64
+
+	// sessions 在线的流会话表，用于服务端下行发送
+	sessionsMu sync.Mutex
+	sessions   map[SessionID]*session
+
+	// stopped 标记 http3.Server 已被 Shutdown/Close（不可复用，重启需重建）
+	stopped atomic.Bool
+
+	// sessionIDGen 会话 ID 生成器。
+	// 不能用 h3 StreamID：QUIC StreamID 只在单条连接内唯一，
+	// 多客户端的首条流恒为 0，会互相覆盖会话表
+	sessionIDGen atomic.Uint64
+}
+
+// session 封装一条被劫持的 HTTP/3 双向流
+type session struct {
+	id SessionID
+	// stream 被服务端劫持的 HTTP/3 流，读用于上行、写用于下行
+	stream *http3.Stream
+	// writeMu 单写者：串行化下行帧写入
+	writeMu sync.Mutex
+}
+
+// writeWithTimeout 带写超时地向会话流写入一帧（QUIC 流在流控耗尽/对端不读时
+// Write 可能阻塞到连接级 MaxIdleTimeout，需要 deadline 兜底）
+func (s *Server) writeWithTimeout(sess *session, data []byte) error {
+	sess.writeMu.Lock()
+	defer sess.writeMu.Unlock()
+
+	if s.timeout > 0 {
+		_ = sess.stream.SetWriteDeadline(time.Now().Add(s.timeout))
+	}
+
+	return WriteFrame(sess.stream, data)
+}
+
+// SendRawData 向指定会话下行发送一帧原始数据
+func (s *Server) SendRawData(sessionId SessionID, data []byte) error {
+	s.sessionsMu.Lock()
+	sess, ok := s.sessions[sessionId]
+	s.sessionsMu.Unlock()
+
+	if !ok {
+		return errors.New("session not found")
+	}
+
+	return s.writeWithTimeout(sess, data)
+}
+
+// BroadcastRawData 向所有在线会话下行发送一帧原始数据
+func (s *Server) BroadcastRawData(data []byte) error {
+	s.sessionsMu.Lock()
+	sessions := make([]*session, 0, len(s.sessions))
+	for _, sess := range s.sessions {
+		sessions = append(sessions, sess)
+	}
+	s.sessionsMu.Unlock()
+
+	var firstErr error
+	for _, sess := range sessions {
+		if err := s.writeWithTimeout(sess, data); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // Middleware 是标准 HTTP 中间件类型。
@@ -62,6 +130,7 @@ func NewServer(opts ...ServerOption) *Server {
 		mux:       http.NewServeMux(),
 
 		messageHandlers: make(MessageHandlerMap),
+		sessions:        make(map[SessionID]*session),
 		codec:           encoding.GetCodec("json"),
 	}
 	srv.init(opts...)
@@ -71,13 +140,7 @@ func NewServer(opts ...ServerOption) *Server {
 func (s *Server) init(opts ...ServerOption) {
 	const idleTimeout = 30 * time.Second
 
-	s.Server = &http3.Server{
-		Addr: ":443",
-		QUICConfig: &quic.Config{
-			MaxIdleTimeout:  idleTimeout,
-			KeepAlivePeriod: idleTimeout / 2,
-		},
-	}
+	s.rebuildHTTPServer()
 
 	for _, o := range opts {
 		o(s)
@@ -144,7 +207,18 @@ func (s *Server) listenAndEndpoint() error {
 }
 
 func (s *Server) Start(_ context.Context) error {
+	if !s.running.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	// Stop 后 http3.Server 已永久关闭，重启必须重建实例（配置沿用 init）
+	if s.stopped.Load() {
+		s.rebuildHTTPServer()
+		s.stopped.Store(false)
+	}
+
 	if err := s.listenAndEndpoint(); err != nil {
+		s.running.Store(false)
 		return err
 	}
 
@@ -153,6 +227,7 @@ func (s *Server) Start(_ context.Context) error {
 	if err := s.ListenAndServe(); err != nil {
 		if !errors.Is(err, http.ErrServerClosed) {
 			LogErrorf("start server failed: %s", err.Error())
+			s.running.Store(false)
 			return err
 		}
 	}
@@ -160,14 +235,34 @@ func (s *Server) Start(_ context.Context) error {
 	return nil
 }
 
-func (s *Server) Stop(_ context.Context) error {
+func (s *Server) Stop(ctx context.Context) error {
 	LogInfo("server stopping...")
+
+	s.stopped.Store(true)
 
 	if s.ctxCancel != nil {
 		s.ctxCancel()
 	}
 
-	err := s.Server.Close()
+	// 先尝试优雅关闭（等待在途请求），失败或超时则硬关闭
+	s.running.Store(false)
+
+	err := s.Server.Shutdown(ctx)
+	if err != nil {
+		LogWarnf("graceful shutdown failed, closing: %s", err.Error())
+		err = s.Server.Close()
+	}
+
+	// GOAWAY 对自定义帧协议的客户端无感知，必须主动关闭被劫持的流，
+	// 否则 refCount.Wait 会一直等客户端主动断开
+	s.sessionsMu.Lock()
+	for _, sess := range s.sessions {
+		sess.stream.CancelRead(0)
+		sess.stream.Close()
+	}
+	s.sessions = make(map[SessionID]*session)
+	s.sessionsMu.Unlock()
+
 	s.refCount.Wait()
 
 	LogInfo("server stopped.")
@@ -176,6 +271,9 @@ func (s *Server) Stop(_ context.Context) error {
 }
 
 func (s *Server) RegisterMessageHandler(messageType MessageType, handler MessageHandler, binder Binder) {
+	s.handlersMu.Lock()
+	defer s.handlersMu.Unlock()
+
 	if _, ok := s.messageHandlers[messageType]; ok {
 		return
 	}
@@ -186,6 +284,9 @@ func (s *Server) RegisterMessageHandler(messageType MessageType, handler Message
 }
 
 func (s *Server) DeregisterMessageHandler(messageType MessageType) {
+	s.handlersMu.Lock()
+	defer s.handlersMu.Unlock()
+
 	delete(s.messageHandlers, messageType)
 }
 
@@ -213,7 +314,9 @@ func (s *Server) messageHandler(sessionId SessionID, buf []byte) error {
 		return err
 	}
 
+	s.handlersMu.RLock()
 	handlerData, ok := s.messageHandlers[msg.Type]
+	s.handlersMu.RUnlock()
 	if !ok {
 		LogError("message type not found:", msg.Type)
 		return errors.New("message handler not found")
@@ -256,8 +359,13 @@ func (s *Server) addHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Accept the session by sending 200 OK
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
-	w.(http.Flusher).Flush()
+	flusher.Flush()
 
 	// Hijack the HTTP/3 stream for bidirectional communication
 	hijacker, ok := w.(http3.HTTPStreamer)
@@ -269,8 +377,13 @@ func (s *Server) addHandler(w http.ResponseWriter, r *http.Request) {
 
 	stream := hijacker.HTTPStream()
 
-	// Generate session ID from stream ID
-	sessionId := SessionID(stream.StreamID())
+	// Generate session ID：连接内唯一的自增 ID
+	sessionId := SessionID(s.sessionIDGen.Add(1))
+
+	sess := &session{id: sessionId, stream: stream}
+	s.sessionsMu.Lock()
+	s.sessions[sessionId] = sess
+	s.sessionsMu.Unlock()
 
 	s.sessionCount.Add(1)
 
@@ -283,6 +396,9 @@ func (s *Server) addHandler(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer s.refCount.Done()
 		defer func() {
+			s.sessionsMu.Lock()
+			delete(s.sessions, sessionId)
+			s.sessionsMu.Unlock()
 			s.sessionCount.Add(-1)
 			if s.connectHandler != nil {
 				s.connectHandler(sessionId, false)
@@ -296,40 +412,69 @@ func (s *Server) addHandler(w http.ResponseWriter, r *http.Request) {
 // serveSession reads messages from the hijacked stream and dispatches them
 // to the registered message handlers.
 func (s *Server) serveSession(sessionId SessionID, stream *http3.Stream) {
-	buf := make([]byte, 4096)
-
 	for {
-		// Read message length (4 bytes, little-endian uint32)
-		var sizeBuf [4]byte
-		if _, err := io.ReadFull(stream, sizeBuf[:]); err != nil {
+		// 按帧读取上行消息（4 字节小端长度前缀 + payload）
+		frame, err := ReadFrame(stream)
+		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-				LogErrorf("session %d: read size error: %s", sessionId, err)
-			}
-			return
-		}
-
-		// Decode message length
-		msgLen := uint(sizeBuf[0]) | uint(sizeBuf[1])<<8 | uint(sizeBuf[2])<<16 | uint(sizeBuf[3])<<24
-		if msgLen == 0 {
-			continue
-		}
-
-		// Grow buffer if needed
-		if uint(cap(buf)) < msgLen {
-			buf = make([]byte, msgLen)
-		}
-		data := buf[:msgLen]
-
-		if _, err := io.ReadFull(stream, data); err != nil {
-			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-				LogErrorf("session %d: read data error: %s", sessionId, err)
+				LogErrorf("session %d: read error: %s", sessionId, err)
 			}
 			return
 		}
 
 		// Dispatch to message handler
-		if err := s.messageHandler(sessionId, data); err != nil {
+		if err := s.messageHandler(sessionId, frame); err != nil {
 			LogErrorf("session %d: message handler error: %s", sessionId, err)
 		}
+	}
+}
+
+// rebuildHTTPServer 重建内嵌的 http3.Server（Shutdown/Close 后不可复用，重启支持）。
+// 保留旧实例上的 Addr/QUICConfig/Handler 等运行期配置，避免重启后监听地址与
+// QUIC 参数静默回退默认值
+func (s *Server) rebuildHTTPServer() {
+	const idleTimeout = 30 * time.Second
+
+	// 保留旧实例配置（首次调用时为 nil，走默认）
+	oldAddr, oldQUIC, oldHandler := "", (*quic.Config)(nil), http.Handler(nil)
+	if s.Server != nil {
+		oldAddr = s.Server.Addr
+		oldQUIC = s.Server.QUICConfig
+		oldHandler = s.Server.Handler
+	}
+
+	s.Server = &http3.Server{
+		Addr: ":443",
+		QUICConfig: &quic.Config{
+			MaxIdleTimeout:  idleTimeout,
+			KeepAlivePeriod: idleTimeout / 2,
+		},
+	}
+
+	if oldAddr != "" && oldAddr != ":443" {
+		s.Server.Addr = oldAddr
+	}
+	if oldQUIC != nil {
+		s.Server.QUICConfig = oldQUIC
+	}
+	if oldHandler != nil {
+		s.Server.Handler = oldHandler
+	}
+
+	if s.tlsConf != nil {
+		s.Server.TLSConfig = s.tlsConf
+	}
+	if s.timeout == 0 {
+		s.timeout = 5 * time.Second
+	}
+	if s.Server.AdditionalSettings == nil {
+		s.Server.AdditionalSettings = make(map[uint64]uint64)
+	}
+	s.Server.AdditionalSettings[settingsEnableWebtransport] = 1
+
+	// 注意：不在 rebuild 里重复注册 mux 路由——
+	// http.ServeMux 对同一 pattern 二次注册会 panic，路由在 init 时已注册
+	if s.Server.Handler == nil {
+		s.Server.Handler = s.mux
 	}
 }

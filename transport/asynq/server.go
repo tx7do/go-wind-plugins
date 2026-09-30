@@ -651,7 +651,9 @@ func (s *Server) NewPeriodicTask(cronSpec, typeName string, msg any, opts ...asy
 	return entryID, nil
 }
 
-// RemovePeriodicTask 移除一个定时任务。
+// RemovePeriodicTask 按 typeName 移除定时任务。
+// 多个定时任务共用同一 typeName 时，只能移除最近注册的一条；
+// 其余的请使用 NewPeriodicTask 返回的 entryID 调用 RemovePeriodicTaskByID 移除。
 func (s *Server) RemovePeriodicTask(taskId string) error {
 	entryId := s.QueryPeriodicTaskEntryID(taskId)
 	if entryId == "" {
@@ -663,6 +665,24 @@ func (s *Server) RemovePeriodicTask(taskId string) error {
 	}
 
 	s.removePeriodicTaskEntryID(taskId)
+	return nil
+}
+
+// RemovePeriodicTaskByID 按 NewPeriodicTask 返回的 entryID 移除定时任务。
+// 与按 typeName 查找的 RemovePeriodicTask 不同，它不受 typeName 撞键影响：
+// 共用同一 typeName 的多条定时任务可以各自独立移除。
+func (s *Server) RemovePeriodicTaskByID(entryId string) error {
+	if entryId == "" {
+		return errors.New("entryId cannot be empty")
+	}
+
+	if err := s.unregisterPeriodicTask(entryId); err != nil {
+		log.Printf("[asynq] [%s] dequeue periodic task failed: %s", entryId, err.Error())
+		return err
+	}
+
+	s.removePeriodicTaskEntryIDByEntryID(entryId)
+
 	return nil
 }
 
@@ -699,6 +719,19 @@ func (s *Server) removePeriodicTaskEntryID(taskId string) {
 	s.mtxEntryIDs.Lock()
 	defer s.mtxEntryIDs.Unlock()
 	delete(s.entryIDs, taskId)
+}
+
+// removePeriodicTaskEntryIDByEntryID 按 entryID 反查并移除其所在的映射项
+// （entryIDs 以 typeName 为键，因此需要遍历值匹配）。
+func (s *Server) removePeriodicTaskEntryIDByEntryID(entryId string) {
+	s.mtxEntryIDs.Lock()
+	defer s.mtxEntryIDs.Unlock()
+
+	for taskId, id := range s.entryIDs {
+		if id == entryId {
+			delete(s.entryIDs, taskId)
+		}
+	}
 }
 
 // QueryPeriodicTaskEntryID 查询定时任务的 entry ID。

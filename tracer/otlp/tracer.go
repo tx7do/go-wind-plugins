@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"context"
+	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -20,10 +21,11 @@ type Tracer struct {
 
 // tracerOptions 是 Tracer 的内部配置。
 type tracerOptions struct {
-	propagator propagation.TextMapPropagator
-	kind       trace.SpanKind
-	tracerName string
-	spanName   string
+	propagator     propagation.TextMapPropagator
+	tracerProvider trace.TracerProvider
+	kind           trace.SpanKind
+	tracerName     string
+	spanName       string
 }
 
 // TracerOption 是 Tracer 的配置选项。
@@ -46,7 +48,14 @@ func WithPropagator(p propagation.TextMapPropagator) TracerOption {
 // WithTracerProvider 设置自定义 TracerProvider。
 func WithTracerProvider(provider trace.TracerProvider) TracerOption {
 	return func(o *tracerOptions) {
-		otel.SetTracerProvider(provider)
+		o.tracerProvider = provider
+	}
+}
+
+// WithGlobalTracerProvider 绑定全局 TracerProvider。
+func WithGlobalTracerProvider() TracerOption {
+	return func(o *tracerOptions) {
+		o.tracerProvider = otel.GetTracerProvider()
 	}
 }
 
@@ -66,11 +75,24 @@ func NewTracer(kind trace.SpanKind, spanName string, opts ...TracerOption) *Trac
 	for _, opt := range opts {
 		opt(&o)
 	}
+
+	// 优先使用注入的 provider 创建 tracer；
+	// 全局 provider 的设置只作为兼容行为保留（旧版本依赖它让 otel.Tracer 生效）。
+	var tracer trace.Tracer
+	if o.tracerProvider != nil {
+		otel.SetTracerProvider(o.tracerProvider)
+		tracer = o.tracerProvider.Tracer(o.tracerName)
+	} else {
+		tracer = otel.Tracer(o.tracerName)
+	}
 	o.spanName = spanName
 
-	return &Tracer{
-		tracer: otel.Tracer(o.tracerName),
-		opt:    &o,
+	switch kind {
+	case trace.SpanKindProducer, trace.SpanKindConsumer,
+		trace.SpanKindServer, trace.SpanKindClient:
+		return &Tracer{tracer: tracer, opt: &o}
+	default:
+		panic(fmt.Sprintf("unsupported span kind: %v", kind))
 	}
 }
 

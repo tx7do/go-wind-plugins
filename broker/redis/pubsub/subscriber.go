@@ -33,7 +33,13 @@ func (s *subscriber) onMessage(channel string, data []byte) error {
 		m.Body = s.binder()
 
 		if err := broker.Unmarshal(s.b.options.Codec, data, &m.Body); err != nil {
-			return err
+			// 毒消息：通知 ErrorHandler（PUBLISH 无重投语义，只能丢弃）
+			redisOption.LogErrorf("unmarshal message failed: %v", err)
+			p := publication{topic: channel, message: &m, err: err}
+			if eh := s.b.options.ErrorHandler; eh != nil {
+				_ = eh(s.options.Context, &p)
+			}
+			return nil
 		}
 	} else {
 		m.Body = data
@@ -45,6 +51,9 @@ func (s *subscriber) onMessage(channel string, data []byte) error {
 	}
 
 	if p.err = s.handler(s.options.Context, &p); p.err != nil {
+		if eh := s.b.options.ErrorHandler; eh != nil {
+			_ = eh(s.options.Context, &p)
+		}
 		return p.err
 	}
 
@@ -132,12 +141,25 @@ func (s *subscriber) receiveLoop() error {
 				return
 			case <-ticker.C:
 				s.RLock()
-				conn := s.conn
+				addr := s.b.Address()
+				pool := s.b.pool
 				s.RUnlock()
-				if conn == nil {
+				if pool == nil {
 					return
 				}
-				if err := conn.Ping(""); err != nil {
+				// 用独立连接做健康检查：PubSubConn 的 Ping 内部会 Receive，
+				// 与接收循环并发会偷走 PUBLISH 响应帧（消息丢失 + 数据竞争）
+				checkConn, err := redis.DialURL(addr,
+					redis.DialConnectTimeout(redisOption.DefaultConnectTimeout),
+					redis.DialReadTimeout(3*time.Second),
+				)
+				if err != nil {
+					pingErr <- err
+					return
+				}
+				_, err = checkConn.Do("PING")
+				_ = checkConn.Close()
+				if err != nil {
 					pingErr <- err
 					return
 				}
@@ -177,7 +199,7 @@ func (s *subscriber) receiveLoop() error {
 			}
 
 		case redis.Pong:
-			redisOption.LogDebug("pong")
+			// 心跳 PONG 帧是正常保活行为，静默处理，避免周期性日志噪音（issue #133）
 		}
 	}
 }

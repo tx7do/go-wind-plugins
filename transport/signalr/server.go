@@ -9,8 +9,6 @@ package signalr
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"time"
@@ -26,16 +24,6 @@ const KindSignalR = "signalr"
 
 // 确保 Server 实现了 wind transport.Server 接口。
 var _ transport.Server = (*Server)(nil)
-
-// signalrLogger 实现 signalr 库的 Logger 接口，使用标准库 log 输出。
-type signalrLogger struct {
-	debug bool
-}
-
-func (l *signalrLogger) Log(keyVals ...any) error {
-	log.Printf("[signalr] %v", fmt.Sprint(keyVals...))
-	return nil
-}
 
 type Server struct {
 	signalr.Server
@@ -54,6 +42,9 @@ type Server struct {
 	debug bool
 
 	codec encoding.Codec
+
+	allowedOrigins   []string
+	allowCredentials bool
 
 	hub signalr.HubInterface
 
@@ -89,7 +80,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.lis = lis
 
-	log.Printf("[signalr] server listening on: %s", lis.Addr().String())
+	LogInfof("server listening on: %s", lis.Addr().String())
 
 	// 应用中间件链
 	handler := s.CORS(s.router)
@@ -112,7 +103,7 @@ func (s *Server) Start(ctx context.Context) error {
 		_ = s.lis.Close()
 	}
 
-	log.Println("[signalr] server stopped")
+	LogInfof("server stopped")
 	return nil
 }
 
@@ -122,7 +113,7 @@ func (s *Server) Stop(_ context.Context) error {
 	if s.lis != nil {
 		err = s.lis.Close()
 	}
-	log.Println("[signalr] server stopped")
+	LogInfof("server stopped")
 	return err
 }
 
@@ -160,15 +151,23 @@ func (s *Server) init(opts ...Option) {
 		o(s)
 	}
 
-	server, err := signalr.NewServer(context.Background(),
-		signalr.Logger(&signalrLogger{debug: s.debug}, s.debug),
-		signalr.SimpleHubFactory(s.hub),
+	options := []func(signalr.Party) error{
+		signalr.Logger(&logger{}, s.debug),
 		signalr.KeepAliveInterval(s.keepAliveInterval),
 		signalr.ChanReceiveTimeout(s.chanReceiveTimeout),
 		signalr.StreamBufferCapacity(s.streamBufferCapacity),
+	}
+
+	// 未传 WithHub 时 SimpleHubFactory(nil) 会在库内反射解引用直接 panic
+	if s.hub != nil {
+		options = append(options, signalr.SimpleHubFactory(s.hub))
+	}
+
+	server, err := signalr.NewServer(context.Background(),
+		options...,
 	)
 	if err != nil {
-		log.Printf("[signalr] create server failed: %s", err)
+		LogErrorf("create server failed: %s", err)
 		return
 	}
 	s.Server = server

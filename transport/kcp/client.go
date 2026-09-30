@@ -3,9 +3,9 @@ package kcp
 import (
 	"context"
 	"errors"
-	"log"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tx7do/go-wind-plugins/encoding"
@@ -27,7 +27,10 @@ type ClientHandlerData struct {
 type ClientMessageHandlerMap map[NetMessageType]ClientHandlerData
 
 type Client struct {
-	conn *kcp.UDPSession
+	connMu    sync.RWMutex
+	writeMu   sync.Mutex
+	handlerMu sync.RWMutex
+	conn      *kcp.UDPSession
 
 	url      string
 	endpoint *url.URL
@@ -67,11 +70,10 @@ func (c *Client) init(opts ...ClientOption) {
 
 	addr := c.url
 
-	prefix := "udp://"
+	// 仅在缺失时补 udp:// 前缀（原先两分支相同，已带前缀时会拼出 udp://udp://…）
 	if !strings.HasPrefix(addr, "udp://") {
-		prefix = "udp://"
+		addr = "udp://" + addr
 	}
-	addr = prefix + addr
 
 	c.endpoint, _ = url.Parse(addr)
 }
@@ -81,16 +83,21 @@ func (c *Client) Connect() error {
 		return errors.New("endpoint is nil")
 	}
 
-	log.Printf("[kcp] connecting to %s", c.endpoint.String())
+	LogInfof("connecting to %s", c.endpoint.String())
 
 	block := NewBlockCryptFromPassword(c.blockCryptPassword, c.blockCryptSalt)
-	conn, err := kcp.DialWithOptions(c.url, block, c.dataShards, c.parityShards)
+
+	// kcp-go 不接受 scheme 前缀；用户传 udp://host:port 时剥离后再拨
+	dialAddr := strings.TrimPrefix(c.url, "udp://")
+	conn, err := kcp.DialWithOptions(dialAddr, block, c.dataShards, c.parityShards)
 	if err != nil {
-		log.Printf("[kcp] cant connect to server: %s", err)
+		LogErrorf("cant connect to server: %s", err)
 		return err
 	}
 
+	c.connMu.Lock()
 	c.conn = conn
+	c.connMu.Unlock()
 
 	go c.run()
 
@@ -98,15 +105,22 @@ func (c *Client) Connect() error {
 }
 
 func (c *Client) Disconnect() {
-	if c.conn != nil {
-		if err := c.conn.Close(); err != nil {
-			log.Printf("[kcp] disconnect error: %s", err)
+	c.connMu.Lock()
+	conn := c.conn
+	c.conn = nil
+	c.connMu.Unlock()
+
+	if conn != nil {
+		if err := conn.Close(); err != nil {
+			LogErrorf("disconnect error: %s", err)
 		}
-		c.conn = nil
 	}
 }
 
 func (c *Client) RegisterMessageHandler(messageType NetMessageType, handler ClientMessageHandler, binder Creator) {
+	c.handlerMu.Lock()
+	defer c.handlerMu.Unlock()
+
 	if _, ok := c.messageHandlers[messageType]; ok {
 		return
 	}
@@ -121,7 +135,7 @@ func RegisterClientMessageHandler[T any](cli *Client, messageType NetMessageType
 			case *T:
 				return handler(t)
 			default:
-				log.Printf("[kcp] invalid payload struct type: %T", t)
+				LogError("invalid payload struct type:", t)
 				return errors.New("invalid payload struct type")
 			}
 		},
@@ -133,11 +147,18 @@ func RegisterClientMessageHandler[T any](cli *Client, messageType NetMessageType
 }
 
 func (c *Client) DeregisterMessageHandler(messageType NetMessageType) {
+	c.handlerMu.Lock()
+	defer c.handlerMu.Unlock()
+
 	delete(c.messageHandlers, messageType)
 }
 
 func (c *Client) SendRawData(message []byte) error {
-	if c.conn == nil {
+	c.connMu.RLock()
+	conn := c.conn
+	c.connMu.RUnlock()
+
+	if conn == nil {
 		return errors.New("client is not connected")
 	}
 
@@ -150,7 +171,12 @@ func (c *Client) SendRawData(message []byte) error {
 		c.m.Counter(context.Background(), "kcp.client.messages.sent", 1, labels)
 	}
 
-	if _, err := c.conn.Write(message); err != nil {
+	// 写锁串行化：并发发送时单帧 Write 交错会破坏帧流
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	// 写入带长度前缀的帧，与服务端分包逻辑对应
+	if err := WriteFrame(conn, message); err != nil {
 		if c.m != nil {
 			c.m.Counter(context.Background(), "kcp.client.messages.errors", 1, map[string]string{
 				"rpc.system": "kcp",
@@ -185,27 +211,45 @@ func (c *Client) SendMessage(messageType int, message any) error {
 }
 
 func (c *Client) run() {
-	defer c.Disconnect()
-
-	buf := make([]byte, 102400)
+	// 只关闭本次连接：旧读循环收敛时不应误杀用户新建的连接
+	c.connMu.RLock()
+	conn := c.conn
+	c.connMu.RUnlock()
+	defer func() {
+		c.connMu.Lock()
+		if c.conn == conn {
+			c.conn = nil
+		}
+		c.connMu.Unlock()
+		if conn != nil {
+			if err := conn.Close(); err != nil {
+				LogErrorf("disconnect error: %s", err)
+			}
+		}
+	}()
 
 	for {
-		readLen, err := c.conn.Read(buf)
+		if conn == nil {
+			return
+		}
+
+		// 按帧读取，与服务端分包逻辑对应
+		frame, err := ReadFrame(conn)
 		if err != nil {
-			log.Printf("[kcp] read message error: %v", err)
+			LogErrorf("read message error: %v", err)
 			return
 		}
 
 		if c.rawMessageHandler != nil {
-			if err := c.rawMessageHandler(buf[:readLen]); err != nil {
-				log.Printf("[kcp] raw data handler exception: %s", err)
+			if err := c.rawMessageHandler(frame); err != nil {
+				LogErrorf("raw data handler exception: %s", err)
 				continue
 			}
 			continue
 		}
 
-		if err = c.messageHandler(buf[:readLen]); err != nil {
-			log.Printf("[kcp] process message error: %v", err)
+		if err = c.messageHandler(frame); err != nil {
+			LogErrorf("process message error: %v", err)
 		}
 
 		if c.m != nil {
@@ -219,13 +263,13 @@ func (c *Client) run() {
 func (c *Client) messageHandler(buf []byte) error {
 	var msg NetPacket
 	if err := msg.Unmarshal(buf); err != nil {
-		log.Printf("[kcp] decode message exception: %s", err)
+		LogErrorf("decode message exception: %s", err)
 		return err
 	}
 
 	handlerData, ok := c.messageHandlers[msg.Type]
 	if !ok {
-		log.Printf("[kcp] message type not found: %d", msg.Type)
+		LogError("message type not found:", msg.Type)
 		return errors.New("message handler not found")
 	}
 
@@ -235,7 +279,7 @@ func (c *Client) messageHandler(buf []byte) error {
 		payload = handlerData.Creator()
 
 		if err := c.codec.Unmarshal(msg.Payload, payload); err != nil {
-			log.Printf("[kcp] unmarshal message exception: %s", err)
+			LogErrorf("unmarshal message exception: %s", err)
 			return err
 		}
 	} else {
@@ -243,7 +287,7 @@ func (c *Client) messageHandler(buf []byte) error {
 	}
 
 	if err := handlerData.Handler(payload); err != nil {
-		log.Printf("[kcp] message handler exception: %s", err)
+		LogErrorf("message handler exception: %s", err)
 		return err
 	}
 

@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"log"
 	"net/url"
 	"sync"
 	"time"
@@ -38,8 +37,9 @@ type Session struct {
 
 	hooks SessionHooks
 
-	lastReadMessageTime  time.Time
-	lastWriteMessageTime time.Time
+	// readTimeout 空闲读超时；0 表示不设置（默认）。由 Server 的 WithTimeout 接线，
+	// 用于回收半开连接；每收到一条消息自动顺延
+	readTimeout time.Duration
 
 	connMu     sync.RWMutex
 	done       chan struct{}
@@ -87,6 +87,9 @@ func (s *Session) SendMessage(message []byte) {
 	case <-s.done:
 		return
 	case s.send <- message:
+	case <-time.After(5 * time.Second):
+		// 慢消费者（writePump 阻塞）不能无限拖住调用方/广播方
+		LogErrorf("session %s send buffer full, message dropped", s.SessionID())
 	}
 }
 
@@ -124,7 +127,7 @@ func (s *Session) closeConnect() {
 
 	if conn != nil {
 		if err := conn.Close(); err != nil {
-			log.Printf("[websocket] disconnect error: %s", err.Error())
+			LogErrorf("disconnect error: %s", err.Error())
 		}
 	}
 }
@@ -136,7 +139,7 @@ func (s *Session) sendPingMessage(message string) error {
 	if conn == nil {
 		return nil
 	}
-	return conn.WriteMessage(ws.PingMessage, []byte(message))
+	return conn.WriteControl(ws.PingMessage, []byte(message), time.Now().Add(5*time.Second))
 }
 
 func (s *Session) sendPongMessage(message string) error {
@@ -146,7 +149,8 @@ func (s *Session) sendPongMessage(message string) error {
 	if conn == nil {
 		return nil
 	}
-	return conn.WriteMessage(ws.PongMessage, []byte(message))
+	// gorilla 单写者约束：控制帧必须走 WriteControl，与 writePump 的数据帧并发安全
+	return conn.WriteControl(ws.PongMessage, []byte(message), time.Now().Add(5*time.Second))
 }
 
 func (s *Session) sendTextMessage(message string) error {
@@ -179,19 +183,18 @@ func (s *Session) writePump() {
 			return
 
 		case msg := <-s.send:
-			s.lastWriteMessageTime = time.Now()
 
 			var err error
 			switch s.hooks.getPayloadType() {
 			case PayloadTypeBinary:
 				if err = s.sendBinaryMessage(msg); err != nil {
-					log.Printf("[websocket] write binary message error: %v", err)
+					LogError("write binary message error: ", err)
 					return
 				}
 
 			case PayloadTypeText:
 				if err = s.sendTextMessage(string(msg)); err != nil {
-					log.Printf("[websocket] write text message error: %v", err)
+					LogError("write text message error: ", err)
 					return
 				}
 			}
@@ -202,6 +205,16 @@ func (s *Session) writePump() {
 func (s *Session) readPump() {
 	defer s.wg.Done()
 	defer s.Close()
+
+	conn := s.Conn()
+	if s.readTimeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(s.readTimeout))
+		// gorilla 在内部消费 Ping/Pong 控制帧且不使 ReadMessage 返回，
+		// 必须用 PongHandler 顺延 deadline，否则仅心跳保活的连接会被误杀
+		conn.SetPongHandler(func(string) error {
+			return conn.SetReadDeadline(time.Now().Add(s.readTimeout))
+		})
+	}
 
 	for {
 		select {
@@ -215,15 +228,17 @@ func (s *Session) readPump() {
 			return
 		}
 
+		if s.readTimeout > 0 {
+			_ = conn.SetReadDeadline(time.Now().Add(s.readTimeout))
+		}
+
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
 			if ws.IsUnexpectedCloseError(err, ws.CloseNormalClosure, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
-				log.Printf("[websocket] read message error: %v", err)
+				LogErrorf("read message error: %v", err)
 			}
 			return
 		}
-
-		s.lastReadMessageTime = time.Now()
 
 		switch messageType {
 		case ws.CloseMessage:
@@ -237,7 +252,7 @@ func (s *Session) readPump() {
 
 		case ws.PingMessage:
 			if err = s.sendPongMessage(""); err != nil {
-				log.Printf("[websocket] write pong message error: %v", err)
+				LogError("write pong message error: ", err)
 				return
 			}
 

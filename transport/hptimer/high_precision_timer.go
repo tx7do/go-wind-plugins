@@ -3,7 +3,6 @@ package hptimer
 import (
 	"container/heap"
 	"context"
-	"log"
 	"sync"
 	"time"
 
@@ -71,15 +70,21 @@ func (ht *HighPrecisionTimer) Start() {
 	defer ht.mu.Unlock()
 
 	if ht.running {
-		log.Println("[hptimer] timer engine already running")
+		LogInfof("timer engine already running")
 		return
 	}
 	ht.running = true
 
+	// Stop 会 cancel ctx 且不可逆；直用引擎的 Stop→Start 场景需重建，
+	// 否则 run 循环首行 ctx 检查直接退出，任务静默不触发
+	if ht.ctx.Err() != nil {
+		ht.ctx, ht.cancel = context.WithCancel(context.Background())
+	}
+
 	ht.wg.Add(1)
 	go ht.run() // 启动主循环
 
-	log.Println("[hptimer] timer engine started")
+	LogInfof("timer engine started")
 }
 
 // Stop 停止定时器引擎（优雅退出）
@@ -120,8 +125,12 @@ func (ht *HighPrecisionTimer) AddTask(task *TimerTask) TimerTaskID {
 	defer ht.mu.Unlock()
 
 	// 校验入参
-	if !ht.running || task == nil || task.ID == "" {
-		log.Printf("[hptimer] add task failed: engine not running or invalid task, id=%s", task.ID)
+	if task == nil {
+		LogWarn("add task failed: task is nil")
+		return ""
+	}
+	if !ht.running || task.ID == "" {
+		LogWarnf("add task failed: engine not running or empty task id, id=%s", task.ID)
 		return ""
 	}
 
@@ -135,20 +144,20 @@ func (ht *HighPrecisionTimer) AddTask(task *TimerTask) TimerTaskID {
 		if expr, err := cronexpr.Parse(task.Cron); err == nil {
 			task.At = expr.Next(time.Now())
 		} else {
-			log.Printf("[hptimer] parse cron failed: %v, taskID=%s", err, task.ID)
+			LogErrorf("parse cron failed: %v, taskID=%s", err, task.ID)
 			return ""
 		}
 	}
 
 	// 过滤At为零值的无效任务
 	if task.At.IsZero() {
-		log.Printf("[hptimer] task At is zero, taskID=%s", task.ID)
+		LogWarnf("task At is zero, taskID=%s", task.ID)
 		return ""
 	}
 
 	// 避免重复添加
 	if _, exists := ht.tasks[task.ID]; exists {
-		log.Printf("[hptimer] task already exists, taskID=%s", task.ID)
+		LogWarnf("task already exists, taskID=%s", task.ID)
 		return ""
 	}
 
@@ -175,7 +184,7 @@ func (ht *HighPrecisionTimer) RemoveTask(taskID TimerTaskID) bool {
 
 	task, ok := ht.tasks[taskID]
 	if !ok || !ht.running {
-		log.Printf("[hptimer] remove task failed: not found or engine stopped, taskID=%s", taskID)
+		LogWarnf("remove task failed: not found or engine stopped, taskID=%s", taskID)
 		return false
 	}
 
@@ -195,7 +204,7 @@ func (ht *HighPrecisionTimer) RemoveTask(taskID TimerTaskID) bool {
 	// 从索引中删除
 	delete(ht.tasks, taskID)
 
-	log.Printf("[hptimer] task removed: id=%s", taskID)
+	LogInfof("task removed: id=%s", taskID)
 
 	return true
 }
@@ -324,7 +333,7 @@ func (ht *HighPrecisionTimer) OnTimerTrigger(task *TimerTask) {
 	if task != nil && task.Callback != nil {
 		err := task.Callback(task.Ctx)
 		if err != nil {
-			log.Printf("[hptimer] callback failed: %v, taskID=%s", err, task.ID)
+			LogErrorf("callback failed: %v, taskID=%s", err, task.ID)
 		}
 	}
 }

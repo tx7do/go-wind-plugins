@@ -42,6 +42,10 @@ type rabbitBroker struct {
 func NewBroker(opts ...broker.Option) broker.Broker {
 	options := broker.NewOptionsAndApply(opts...)
 
+	if l := broker.LoggerFromOptions(&options); l != nil {
+		SetLogger(l)
+	}
+
 	b := &rabbitBroker{
 		options:     options,
 		subscribers: broker.NewSubscriberSyncMap(),
@@ -115,13 +119,14 @@ func (b *rabbitBroker) Disconnect() error {
 	b.subscribers.Clear()
 
 	ret := b.conn.Close()
-	b.wg.Wait()
+	// 注意：b.wg 从未 Add（旧实现的每消息计数已移除），
+	// 此处不再等待投递 goroutine——它们的退出由 deliveries channel 关闭保证
 
 	return ret
 }
 
 func (b *rabbitBroker) Request(ctx context.Context, topic string, msg *broker.Message, opts ...broker.RequestOption) (*broker.Message, error) {
-	return nil, errors.New("not implemented")
+	return broker.GenericRequest(ctx, b, topic, msg, opts...)
 }
 
 func (b *rabbitBroker) Publish(ctx context.Context, routingKey string, msg *broker.Message, opts ...broker.PublishOption) error {
@@ -295,13 +300,28 @@ func (b *rabbitBroker) Subscribe(routingKey string, handler broker.Handler, bind
 			m.Body = binder()
 
 			if p.err = broker.Unmarshal(b.options.Codec, msg.Body, &m.Body); p.err != nil {
+				// 反序列化失败：跳过 handler（避免拿到零值 Body 继续处理），
+				// 走统一的错误/Nack 路径
 				LogErrorf("unmarshal message failed: %v", p.err)
+				if eh := b.options.ErrorHandler; eh != nil {
+					_ = eh(ctx, p)
+				}
+				if !options.AutoAck {
+					_ = msg.Nack(false, requeueOnError)
+				}
+				b.finishConsumerSpan(ctx, span, p.err)
+				return
 			}
 		} else {
 			m.Body = msg.Body
 		}
 
 		p.err = handler(ctx, p)
+		if p.err != nil {
+			if eh := b.options.ErrorHandler; eh != nil {
+				_ = eh(ctx, p)
+			}
+		}
 		if p.err == nil && ackSuccess && !options.AutoAck {
 			_ = msg.Ack(false)
 		} else if p.err != nil && !options.AutoAck {
@@ -349,8 +369,21 @@ func (b *rabbitBroker) Subscribe(routingKey string, handler broker.Handler, bind
 		sub.queueArgs = val
 	}
 
+	if old := b.subscribers.Get(routingKey); old != nil {
+		// 同主题重复订阅：先退订旧订阅，避免旧订阅继续消费（泄漏 + 重复消费）
+		if uerr := old.Unsubscribe(false); uerr != nil {
+			LogWarnf("unsubscribe old subscriber for topic %q failed: %v", routingKey, uerr)
+		}
+	}
 	b.subscribers.Add(routingKey, sub)
 
+	// 同步声明队列并绑定到 exchange，确保 Subscribe 返回后即可安全发布
+	if err := sub.declareAndBind(); err != nil {
+		b.subscribers.RemoveOnly(routingKey)
+		return nil, err
+	}
+
+	// resubscribe 负责消费和断线重连（同一消费者，无双消费者风险）
 	go sub.resubscribe()
 
 	return sub, nil
