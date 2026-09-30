@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	windErrors "github.com/tx7do/go-wind/errors"
 )
 
 var contentType = "application/json"
@@ -29,7 +31,27 @@ func WriteResponse(w http.ResponseWriter, r *http.Request, v interface{}) {
 	_, _ = w.Write(data)
 }
 
+// WriteError 将错误写入 HTTP 响应。
+//
+// 结构化错误（[windErrors.WindError]，含被 %w 包装进错误链的情况）按框架
+// 错误模型写出：HTTP 状态码取自 [windErrors.CodeToHTTP] 对错误 Code 的
+// 权威映射（gRPC code → HTTP 状态，与 Envoy / Google API transcoding 同表），
+// 响应体为错误自身的 JSON 形状（reason / details 字段，字段标注见
+// go-wind/errors）。消费端按 reason 驱动本地化文案、按状态码驱动路由分支，
+// 二者均依赖本函数的映射。
+//
+// 非结构化错误不在上述模型内：命中哨兵表（[ErrBadRequest] 等）按表映射状态，
+// 其余统一回退 500；响应体为通用错误文本形式（与既有行为一致，未做脱敏）。
 func WriteError(w http.ResponseWriter, err error) {
+	if wErr, ok := windErrors.FromError(err); ok {
+		body, mErr := json.Marshal(wErr)
+		if mErr == nil {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(windErrors.CodeToHTTP(wErr.Code))
+			_, _ = w.Write(body)
+			return
+		}
+	}
 	code := MapError(err)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)

@@ -1,9 +1,14 @@
 package binding
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	windErrors "github.com/tx7do/go-wind/errors"
 )
 
 type nonFlusher struct {
@@ -59,5 +64,69 @@ func TestWriteStreamChunk(t *testing.T) {
 	}
 	if len(nf.written) != 0 {
 		t.Fatalf("non-flusher wrote %d bytes before error", len(nf.written))
+	}
+}
+
+// WriteError 结构化错误行为契约：
+//   - WindError：HTTP 状态 = CodeToHTTP(Code)，响应体为错误自带 JSON 形状
+//     （含 reason 字段，消费端以此驱动本地化文案）
+//   - 被 %w 包装进错误链的 WindError 同样命中（FromError 沿链取值）
+//   - 哨兵错误保留既有映射与响应体形状
+//   - 未知错误回退 500
+func TestWriteError_StructuredWindError(t *testing.T) {
+	wErr := windErrors.BadRequest("TEST_BAD_REQUEST")
+	rec := httptest.NewRecorder()
+	WriteError(rec, wErr)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if body["reason"] != "TEST_BAD_REQUEST" {
+		t.Fatalf("reason: want TEST_BAD_REQUEST, got %v", body["reason"])
+	}
+	if _, present := body["code"]; present {
+		t.Fatalf("code field should be excluded from the wire shape")
+	}
+}
+
+func TestWriteError_WrappedWindError(t *testing.T) {
+	wErr := windErrors.NotFound("TEST_NOT_FOUND")
+	rec := httptest.NewRecorder()
+	WriteError(rec, fmt.Errorf("wrapped: %w", wErr))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status: want 404, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if body["reason"] != "TEST_NOT_FOUND" {
+		t.Fatalf("reason: want TEST_NOT_FOUND, got %v", body["reason"])
+	}
+}
+
+func TestWriteError_SentinelFallback(t *testing.T) {
+	rec := httptest.NewRecorder()
+	WriteError(rec, ErrBadRequest)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if body["reason"] != nil {
+		t.Fatalf("sentinel path must not emit a reason field")
+	}
+}
+
+func TestWriteError_UnknownFallback(t *testing.T) {
+	rec := httptest.NewRecorder()
+	WriteError(rec, errors.New("boom"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status: want 500, got %d", rec.Code)
 	}
 }
