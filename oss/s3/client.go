@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -35,6 +36,18 @@ func NewClient(cfg *Config) *awss3.Client {
 		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, cfg.Token),
 		))
+	}
+
+	if cfg.MaxAttempts > 0 {
+		loadOpts = append(loadOpts, awsconfig.WithRetryMaxAttempts(cfg.MaxAttempts))
+	}
+
+	if cfg.TLSClientConfig != nil {
+		loadOpts = append(loadOpts, awsconfig.WithHTTPClient(&http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: cfg.TLSClientConfig.Clone(),
+			},
+		}))
 	}
 
 	endpoint := normalizeEndpoint(cfg.Endpoint, cfg.UseSsl)

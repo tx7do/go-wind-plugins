@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"reflect"
 
 	"github.com/minio/minio-go/v7"
@@ -30,12 +31,21 @@ func NewClient(cfg *Config) *minio.Client {
 		return nil
 	}
 
-	impl, err := minio.New(cfg.Endpoint,
-		&minio.Options{
-			Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, cfg.Token),
-			Secure: cfg.UseSsl,
-		},
-	)
+	opts := &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, cfg.Token),
+		Secure: cfg.UseSsl,
+		Region: cfg.Region,
+	}
+	if cfg.ForcePathStyle {
+		opts.BucketLookup = minio.BucketLookupPath
+	}
+	if cfg.TLSClientConfig != nil {
+		opts.Transport = &http.Transport{
+			TLSClientConfig: cfg.TLSClientConfig.Clone(),
+		}
+	}
+
+	impl, err := minio.New(cfg.Endpoint, opts)
 	if err != nil {
 		log.GetLogger().Error(context.Background(), "failed opening connection to minio", "error", err)
 		return nil
