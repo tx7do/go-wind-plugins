@@ -140,6 +140,10 @@ use (
 
 	./transaction
 	./transaction/dtm
+	./transaction/outbox
+	./transaction/saga
+	./transaction/tcc
+	./transaction/xa
 	./transport
 	./transport/grpc/client
 	./transport/grpc/middleware/authn
