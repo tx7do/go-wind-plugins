@@ -224,4 +224,7 @@ use (
 	./workflow/conductor
 	./workflow/goworkflows
 	./workflow/temporal
+
+	./selector
+	./resolver
 )
