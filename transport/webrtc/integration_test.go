@@ -120,6 +120,11 @@ func TestSFUIntegration_MessageMarshalUnmarshal(t *testing.T) {
 		t.Fatal("failed to create server")
 	}
 
+	// 反序列化时按消息类型查找处理器，必须先注册
+	RegisterServerMessageHandler(server, messageTypeChat, func(_ SessionID, msg *chatMessage) error {
+		return nil
+	})
+
 	// 测试二进制包序列化
 	testMsg := chatMessage{
 		Type:    1,

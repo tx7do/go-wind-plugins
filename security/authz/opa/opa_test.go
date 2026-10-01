@@ -287,8 +287,14 @@ func TestAuthorizedProjects(t *testing.T) {
 			require.Equal(t, 1, len(rs[0].Expressions), "expected one result expression")
 			projects, ok := rs[0].Expressions[0].Value.([]interface{})
 			require.True(t, ok, "result value is an array")
-			expectedProjects := engine.MakeProjects("p4", "p3")
-			assert.ElementsMatch(t, expectedProjects, projects, "expected %q to return %v", query, expectedProjects)
+			// OPA 经 JSON 解码后项目是普通字符串，需转成 string 再比较
+			gotProjects := make([]string, 0, len(projects))
+			for _, p := range projects {
+				s, ok := p.(string)
+				require.True(t, ok, "project %v should be a string", p)
+				gotProjects = append(gotProjects, s)
+			}
+			assert.ElementsMatch(t, []string{"p3", "p4"}, gotProjects, "expected %q to return [p3 p4]", query)
 		})
 	}
 }
