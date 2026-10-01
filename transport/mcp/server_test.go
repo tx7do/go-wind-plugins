@@ -16,7 +16,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestServer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -101,6 +111,8 @@ func TestServer(t *testing.T) {
 }
 
 func TestClient(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	ctx := context.Background()
 
 	httpTransport, err := transport.NewStreamableHTTP("http://localhost:8080/mcp")
@@ -157,6 +169,8 @@ func TestClient(t *testing.T) {
 }
 
 func TestServer_RegisterHandlerWithJsonString(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	jsonStr := `{
   "name": "echo",
   "description": "Echoes the input string",
@@ -214,6 +228,8 @@ func TestServer_RegisterHandlerWithJsonString(t *testing.T) {
 }
 
 func TestServer_RegisterHandlerWithJsonSchema(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	jsonSchemaStr := `{
 	"type": "object",
 	"properties": {

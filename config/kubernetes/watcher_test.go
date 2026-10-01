@@ -13,6 +13,7 @@ import (
 )
 
 func TestKube(t *testing.T) {
+	skipWithoutIntegration(t)
 	home := homedir.HomeDir()
 	config, err := clientcmd.BuildConfigFromFlags("", filepath.Join(home, ".kube", "config"))
 	if err != nil {

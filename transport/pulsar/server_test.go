@@ -17,6 +17,14 @@ import (
 	"github.com/tx7do/go-wind-plugins/broker/pulsar"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 const (
 	localBroker = "pulsar://127.0.0.1:6650"
 	testTopic   = "test_topic"
@@ -28,6 +36,8 @@ func handleHygrothermograph(_ context.Context, topic string, headers broker.Head
 }
 
 func TestServer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -54,6 +64,8 @@ func TestServer(t *testing.T) {
 }
 
 func TestClient(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

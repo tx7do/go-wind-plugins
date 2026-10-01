@@ -1,13 +1,23 @@
 package openfga
 
 import (
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestClient(t *testing.T) {
+	skipWithoutIntegration(t)
 	cli := NewClient(
 		WithApiUrl("127.0.0.1:8080"),
 		WithToken(""),

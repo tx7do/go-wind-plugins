@@ -85,6 +85,14 @@ func getClientSet() (*kubernetes.Clientset, error) {
 
 func int32Ptr(i int32) *int32 { return &i }
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestSetEnv(t *testing.T) {
 	_ = os.Setenv("HOSTNAME", podName)
 	if os.Getenv("HOSTNAME") != podName {
@@ -93,6 +101,8 @@ func TestSetEnv(t *testing.T) {
 }
 
 func TestRegistry(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	currentNamespace = "default"
 
 	clientSet, err := getClientSet()

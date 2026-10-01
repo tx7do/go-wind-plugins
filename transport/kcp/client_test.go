@@ -8,6 +8,14 @@ import (
 	"testing"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 var testClient *Client
 
 func handleClientChatMessage(message *ChatMessage) error {
@@ -17,6 +25,8 @@ func handleClientChatMessage(message *ChatMessage) error {
 }
 
 func TestClient(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

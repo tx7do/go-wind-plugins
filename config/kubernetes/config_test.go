@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -29,7 +30,16 @@ var (
 	}
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestSource(t *testing.T) {
+	skipWithoutIntegration(t)
 	home := homedir.HomeDir()
 	s := New(
 		WithNamespace(testNS),
@@ -44,6 +54,7 @@ func TestSource(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
+	skipWithoutIntegration(t)
 	restConfig, err := rest.InClusterConfig()
 	home := homedir.HomeDir()
 

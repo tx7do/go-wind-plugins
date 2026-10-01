@@ -2,12 +2,22 @@ package keto
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestClient_REST(t *testing.T) {
+	skipWithoutIntegration(t)
 	ctx := context.Background()
 
 	cli := NewClient("http://127.0.0.1:4466", "http://127.0.0.1:4467", false)
@@ -24,6 +34,7 @@ func TestClient_REST(t *testing.T) {
 }
 
 func TestClient_GRPC(t *testing.T) {
+	skipWithoutIntegration(t)
 	ctx := context.Background()
 
 	cli := NewClient("127.0.0.1:4466", "127.0.0.1:4467", true)

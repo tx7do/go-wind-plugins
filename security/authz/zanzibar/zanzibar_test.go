@@ -1,13 +1,23 @@
 package zanzibar
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	engine "github.com/tx7do/go-wind-plugins/security/authz"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestOpenFga(t *testing.T) {
+	skipWithoutIntegration(t)
 	// Fix: WithOpenFga expects (string, string, *string, *string, *string, *string, *string)
 	var token *string = nil
 	var clientId *string = nil
@@ -67,6 +77,7 @@ func TestOpenFga(t *testing.T) {
 }
 
 func TestKeto(t *testing.T) {
+	skipWithoutIntegration(t)
 	s, err := NewEngine(t.Context(), WithKeto(
 		"127.0.0.1:4466",
 		"127.0.0.1:4467",

@@ -38,6 +38,8 @@ func handleChatMessage(sessionId SessionID, message *ChatMessage) error {
 }
 
 func TestServer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

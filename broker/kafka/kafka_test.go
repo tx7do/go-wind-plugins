@@ -71,7 +71,17 @@ func RegisterHygrothermographHandler(fnc HygrothermographHandler) broker.Handler
 	}
 }
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func Test_Publish_WithRawData(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -109,6 +119,8 @@ func Test_Publish_WithRawData(t *testing.T) {
 }
 
 func Test_Subscribe_WithRawData(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -136,6 +148,8 @@ func Test_Subscribe_WithRawData(t *testing.T) {
 }
 
 func Test_Publish_WithJsonCodec(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -179,6 +193,8 @@ func Test_Publish_WithJsonCodec(t *testing.T) {
 }
 
 func Test_Subscribe_WithJsonCodec(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -220,6 +236,8 @@ func createTracerProvider(serviceName string) broker.Option {
 }
 
 func Test_Publish_WithTracer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -258,6 +276,8 @@ func Test_Publish_WithTracer(t *testing.T) {
 }
 
 func Test_Subscribe_WithTracer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -286,6 +306,8 @@ func Test_Subscribe_WithTracer(t *testing.T) {
 }
 
 func Test_Publish_WithGlobalTracer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -339,6 +361,8 @@ func Test_Publish_WithGlobalTracer(t *testing.T) {
 }
 
 func Test_Subscribe_WithGlobalTracer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -384,6 +408,8 @@ func Test_Subscribe_WithGlobalTracer(t *testing.T) {
 }
 
 func Test_Publish_WithCompletion(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -426,6 +452,8 @@ func Test_Publish_WithCompletion(t *testing.T) {
 }
 
 func Test_Subscribe_WithWildcardTopic(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -454,6 +482,8 @@ func Test_Subscribe_WithWildcardTopic(t *testing.T) {
 }
 
 func Test_Subscribe_Batch(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

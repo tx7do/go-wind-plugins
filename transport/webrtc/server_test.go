@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 const messageTypeChat NetMessageType = 1
 
 type chatMessage struct {
@@ -46,6 +54,8 @@ func startServerAsync(t *testing.T, srv *Server) chan error {
 }
 
 func TestServer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	//t.Skip("manual smoke test: starts a fixed-port server and waits for OS signal")
 
 	interrupt := make(chan os.Signal, 1)

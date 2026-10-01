@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +12,16 @@ import (
 	wind "github.com/tx7do/go-wind"
 )
 
-func TestRegistry(_ *testing.T) {
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
+func TestRegistry(t *testing.T) {
+	skipWithoutIntegration(t)
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	s1 := &wind.Instance{
@@ -92,7 +102,8 @@ func do(r *Registry, s *wind.Instance) {
 	}
 }
 
-func TestLock(_ *testing.T) {
+func TestLock(t *testing.T) {
+	skipWithoutIntegration(t)
 	type me struct {
 		lock sync.Mutex
 	}

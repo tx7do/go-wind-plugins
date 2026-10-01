@@ -7,10 +7,10 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
+	"github.com/tx7do/go-utils/mapper"
 	paginationV1 "github.com/tx7do/go-wind-plugins/crud/api/gen/go/pagination/v1"
 	paginationBase "github.com/tx7do/go-wind-plugins/crud/pagination"
 	"github.com/tx7do/go-wind-plugins/crud/viewer"
-	"github.com/tx7do/go-utils/mapper"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

@@ -2,6 +2,7 @@ package nacos
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -10,7 +11,16 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestConfig_Load(t *testing.T) {
+	skipWithoutIntegration(t)
 	sc := []constant.ServerConfig{
 		*constant.NewServerConfig("127.0.0.1", 8848),
 	}
@@ -81,6 +91,7 @@ func TestConfig_Load(t *testing.T) {
 }
 
 func TestConfig_WatchValue(t *testing.T) {
+	skipWithoutIntegration(t)
 	sc := []constant.ServerConfig{
 		*constant.NewServerConfig("127.0.0.1", 8848),
 	}

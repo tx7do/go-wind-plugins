@@ -28,6 +28,14 @@ const (
 	testInstanceName = "test@localhost"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func handleHygrothermograph(_ context.Context, topic string, headers broker.Headers, msg *api.Hygrothermograph) error {
 	log.GetLogger().Info(context.Background(), fmt.Sprintf("Topic %s, Headers: %+v, Payload: %+v\n", topic, headers, msg))
 	return nil
@@ -76,6 +84,7 @@ func createTracerProvider(serviceName string) broker.Option {
 }
 
 func TestSubscribe(t *testing.T) {
+	skipWithoutIntegration(t)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -104,6 +113,7 @@ func TestSubscribe(t *testing.T) {
 }
 
 func TestPublish(t *testing.T) {
+	skipWithoutIntegration(t)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -145,6 +155,7 @@ func TestPublish(t *testing.T) {
 }
 
 func TestSubscribe_WithTracer(t *testing.T) {
+	skipWithoutIntegration(t)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -177,6 +188,7 @@ func TestSubscribe_WithTracer(t *testing.T) {
 }
 
 func TestPublish_WithTracer(t *testing.T) {
+	skipWithoutIntegration(t)
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

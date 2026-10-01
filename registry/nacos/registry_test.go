@@ -2,6 +2,7 @@ package nacos
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -13,11 +14,21 @@ import (
 	wind "github.com/tx7do/go-wind"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 var testServerConfig = []constant.ServerConfig{
 	*constant.NewServerConfig("127.0.0.1", 8848),
 }
 
 func TestRegistry_Register(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	sc := testServerConfig
 
 	cc := constant.ClientConfig{
@@ -208,6 +219,8 @@ func TestRegistry_Register(t *testing.T) {
 }
 
 func TestRegistry_Deregister(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	testServer := &wind.Instance{
 		ID:        "1",
 		Name:      "test2",
@@ -327,6 +340,8 @@ func TestRegistry_Deregister(t *testing.T) {
 }
 
 func TestRegistry_GetService(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	sc := testServerConfig
 
 	cc := constant.ClientConfig{
@@ -441,6 +456,8 @@ func TestRegistry_GetService(t *testing.T) {
 }
 
 func TestRegistry_Watch(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	sc := testServerConfig
 
 	cc := constant.ClientConfig{

@@ -24,6 +24,8 @@ import (
 ///////////////////////////////////////////////////////////////////////////////
 
 func TestJetStream_Publish_WithRawData(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -70,6 +72,8 @@ func TestJetStream_Publish_WithRawData(t *testing.T) {
 }
 
 func TestJetStream_Subscribe_WithRawData(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -106,6 +110,8 @@ func TestJetStream_Subscribe_WithRawData(t *testing.T) {
 }
 
 func TestJetStream_Publish_WithJsonCodec(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -151,6 +157,8 @@ func TestJetStream_Publish_WithJsonCodec(t *testing.T) {
 }
 
 func TestJetStream_Subscribe_WithJsonCodec(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -191,6 +199,8 @@ func TestJetStream_Subscribe_WithJsonCodec(t *testing.T) {
 ///////////////////////////////////////////////////////////////////////////////
 
 func TestJetStream_Publish_WithMsgId(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -235,6 +245,8 @@ func TestJetStream_Publish_WithMsgId(t *testing.T) {
 }
 
 func TestJetStream_Subscribe_WithManualAck(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -288,6 +300,8 @@ func TestJetStream_Subscribe_WithManualAck(t *testing.T) {
 }
 
 func TestJetStream_Subscribe_Pull(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -331,6 +345,8 @@ func TestJetStream_Subscribe_Pull(t *testing.T) {
 ///////////////////////////////////////////////////////////////////////////////
 
 func TestJetStream_Publish_WithTracer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -377,6 +393,8 @@ func TestJetStream_Publish_WithTracer(t *testing.T) {
 }
 
 func TestJetStream_Subscribe_WithTracer(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

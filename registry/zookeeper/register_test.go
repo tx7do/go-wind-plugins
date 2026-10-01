@@ -2,6 +2,7 @@ package zookeeper
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -12,7 +13,17 @@ import (
 	baseRegistry "github.com/tx7do/go-wind-plugins/registry"
 )
 
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
+
 func TestRegistry_GetService(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	conn, _, err := zk.Connect([]string{"127.0.0.1:2181"}, time.Second*15)
 	if err != nil {
 		t.Fatal(err)
@@ -118,6 +129,8 @@ func TestRegistry_GetService(t *testing.T) {
 }
 
 func TestRegistry_Register(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	conn, _, err := zk.Connect([]string{"127.0.0.1:2181"}, time.Second*15)
 	if err != nil {
 		t.Fatal(err)
@@ -214,6 +227,8 @@ func TestRegistry_Register(t *testing.T) {
 }
 
 func TestRegistry_Deregister(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	conn, _, err := zk.Connect([]string{"127.0.0.1:2181"}, time.Second*15)
 	if err != nil {
 		t.Fatal(err)
@@ -285,6 +300,8 @@ func TestRegistry_Deregister(t *testing.T) {
 }
 
 func TestRegistry_Watch(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	conn, _, err := zk.Connect([]string{"127.0.0.1:2181"}, time.Second*15)
 	if err != nil {
 		t.Fatal(err)

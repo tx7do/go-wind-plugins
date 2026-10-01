@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -12,6 +13,14 @@ import (
 
 	wind "github.com/tx7do/go-wind"
 )
+
+// skipWithoutIntegration skips tests that need a live external server.
+func skipWithoutIntegration(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KRATOS_IT") == "" {
+		t.Skip("skipping integration test: requires a live server; set KRATOS_IT to enable")
+	}
+}
 
 func tcpServer(lis net.Listener) {
 	for {
@@ -25,6 +34,8 @@ func tcpServer(lis net.Listener) {
 }
 
 func TestRegistry_Register(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	opts := []Option{
 		WithHealthCheck(false),
 	}
@@ -141,6 +152,8 @@ func TestRegistry_Register(t *testing.T) {
 }
 
 func TestRegistry_GetService(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	addr := fmt.Sprintf("%s:9091", getIntranetIP())
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -274,6 +287,8 @@ func TestRegistry_GetService(t *testing.T) {
 }
 
 func TestRegistry_Watch(t *testing.T) {
+	skipWithoutIntegration(t)
+
 	addr := fmt.Sprintf("%s:9091", getIntranetIP())
 
 	time.Sleep(time.Millisecond * 100)
