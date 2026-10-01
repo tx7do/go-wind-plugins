@@ -30,15 +30,21 @@ type Logger interface {
 	Close() error
 }
 
-type cloudwatchLog struct {
-	client   *cloudwatchlogs.Client
-	opts     *options
-	extra    []any
+// logState 保存写入同一个日志流的可变状态。通过 With 派生出的日志器与
+// 父日志器共享同一份状态，保证序列 token 单调递增、缓冲统一刷新。
+type logState struct {
 	mu       sync.Mutex
 	sequence *string // 当前序列 token，用于流式写入
 	buffer   []types.InputLogEvent
 	flushCtx context.Context
 	cancel   context.CancelFunc
+}
+
+type cloudwatchLog struct {
+	client *cloudwatchlogs.Client
+	opts   *options
+	extra  []any
+	st     *logState
 }
 
 // GetClient 返回底层 CloudWatch Logs 客户端。
@@ -47,8 +53,9 @@ func (c *cloudwatchLog) GetClient() *cloudwatchlogs.Client {
 }
 
 // Close 刷新剩余缓冲日志并关闭后台刷新协程。
+// 由于刷新状态为派生日志器共享，任意一个日志器 Close 即关闭整个流。
 func (c *cloudwatchLog) Close() error {
-	c.cancel()
+	c.st.cancel()
 	c.flush()
 	return nil
 }
@@ -74,11 +81,13 @@ func (c *cloudwatchLog) Error(_ context.Context, msg string, keyvals ...any) {
 }
 
 // With 返回附加了指定 key-value 对的新 Logger 实例。
+// 新实例与当前实例共享缓冲区、序列 token 与刷新协程。
 func (c *cloudwatchLog) With(keyvals ...any) bLogger.Logger {
 	return &cloudwatchLog{
 		client: c.client,
 		opts:   c.opts,
 		extra:  append(append([]any{}, c.extra...), keyvals...),
+		st:     c.st,
 	}
 }
 
@@ -105,10 +114,10 @@ func (c *cloudwatchLog) post(level, msg string, keyvals []any) {
 		Message:   aws.String(string(jsonBytes)),
 	}
 
-	c.mu.Lock()
-	c.buffer = append(c.buffer, event)
-	shouldFlush := len(c.buffer) >= c.opts.batchSize
-	c.mu.Unlock()
+	c.st.mu.Lock()
+	c.st.buffer = append(c.st.buffer, event)
+	shouldFlush := len(c.st.buffer) >= c.opts.batchSize
+	c.st.mu.Unlock()
 
 	if shouldFlush {
 		c.flush()
@@ -117,15 +126,15 @@ func (c *cloudwatchLog) post(level, msg string, keyvals []any) {
 
 // flush 将缓冲区中的日志批量发送到 CloudWatch Logs。
 func (c *cloudwatchLog) flush() {
-	c.mu.Lock()
-	if len(c.buffer) == 0 {
-		c.mu.Unlock()
+	c.st.mu.Lock()
+	if len(c.st.buffer) == 0 {
+		c.st.mu.Unlock()
 		return
 	}
-	events := c.buffer
-	c.buffer = nil
-	token := c.sequence
-	c.mu.Unlock()
+	events := c.st.buffer
+	c.st.buffer = nil
+	token := c.st.sequence
+	c.st.mu.Unlock()
 
 	input := &cloudwatchlogs.PutLogEventsInput{
 		LogGroupName:  aws.String(c.opts.logGroup),
@@ -136,13 +145,13 @@ func (c *cloudwatchLog) flush() {
 		input.SequenceToken = token
 	}
 
-	resp, err := c.client.PutLogEvents(c.flushCtx, input)
+	resp, err := c.client.PutLogEvents(c.st.flushCtx, input)
 	if err != nil {
 		// 如果序列 token 不匹配，重新获取并重试一次
 		if isSequenceTokenErr(err) {
 			if seq, e := c.getSequenceToken(); e == nil && seq != nil {
 				input.SequenceToken = seq
-				resp, err = c.client.PutLogEvents(c.flushCtx, input)
+				resp, err = c.client.PutLogEvents(c.st.flushCtx, input)
 			}
 		}
 		if err != nil {
@@ -151,14 +160,14 @@ func (c *cloudwatchLog) flush() {
 		}
 	}
 
-	c.mu.Lock()
-	c.sequence = resp.NextSequenceToken
-	c.mu.Unlock()
+	c.st.mu.Lock()
+	c.st.sequence = resp.NextSequenceToken
+	c.st.mu.Unlock()
 }
 
 // getSequenceToken 获取当前日志流的序列 token。
 func (c *cloudwatchLog) getSequenceToken() (*string, error) {
-	resp, err := c.client.DescribeLogStreams(c.flushCtx, &cloudwatchlogs.DescribeLogStreamsInput{
+	resp, err := c.client.DescribeLogStreams(c.st.flushCtx, &cloudwatchlogs.DescribeLogStreamsInput{
 		LogGroupName:        aws.String(c.opts.logGroup),
 		LogStreamNamePrefix: aws.String(c.opts.logStream),
 	})
@@ -208,10 +217,12 @@ func NewCloudWatchLogger(ctx context.Context, opts ...Option) (Logger, error) {
 	flushCtx, cancel := context.WithCancel(context.Background())
 
 	l := &cloudwatchLog{
-		client:   client,
-		opts:     cfg,
-		flushCtx: flushCtx,
-		cancel:   cancel,
+		client: client,
+		opts:   cfg,
+		st: &logState{
+			flushCtx: flushCtx,
+			cancel:   cancel,
+		},
 	}
 
 	// 确保日志组和流存在
@@ -275,7 +286,7 @@ func (c *cloudwatchLog) autoFlush() {
 		select {
 		case <-ticker.C:
 			c.flush()
-		case <-c.flushCtx.Done():
+		case <-c.st.flushCtx.Done():
 			return
 		}
 	}

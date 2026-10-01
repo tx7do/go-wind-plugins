@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	wind "github.com/tx7do/go-wind"
@@ -23,14 +24,19 @@ var (
 	_ baseRegistry.Discovery = (*Registry)(nil)
 )
 
-// _instanceIDSeparator . Instance id Separator.
-const _instanceIDSeparator = "-"
+// _instanceIDSeparator joins the per-endpoint instance IDs inside
+// wind.Instance.ID. It must never appear inside a Polaris instance ID itself
+// (UUID-style IDs contain "-", so "-" cannot be used here).
+const _instanceIDSeparator = "|"
 
 // Registry is polaris registry.
 type Registry struct {
 	opt      options
 	provider api.ProviderAPI
 	consumer api.ConsumerAPI
+
+	mu    sync.Mutex
+	stops map[string]chan struct{} // endpoint → heartbeat stop signal
 }
 
 func New(provider api.ProviderAPI, consumer api.ConsumerAPI, opts ...Option) (r *Registry) {
@@ -54,6 +60,7 @@ func New(provider api.ProviderAPI, consumer api.ConsumerAPI, opts ...Option) (r 
 		opt:      op,
 		provider: provider,
 		consumer: consumer,
+		stops:    make(map[string]chan struct{}),
 	}
 }
 
@@ -133,32 +140,7 @@ func (r *Registry) Register(_ context.Context, serviceInstance *wind.Instance) e
 		instanceID := service.InstanceID
 
 		if r.opt.Heartbeat {
-			// start heartbeat report
-			go func() {
-				ticker := time.NewTicker(time.Second * time.Duration(r.opt.TTL))
-				defer ticker.Stop()
-
-				for {
-					<-ticker.C
-
-					err = r.provider.Heartbeat(&api.InstanceHeartbeatRequest{
-						InstanceHeartbeatRequest: model.InstanceHeartbeatRequest{
-							Service:      serviceInstance.Name + u.Scheme,
-							Namespace:    r.opt.Namespace,
-							Host:         host,
-							Port:         portNum,
-							ServiceToken: r.opt.ServiceToken,
-							InstanceID:   instanceID,
-							Timeout:      &r.opt.Timeout,
-							RetryCount:   &r.opt.RetryCount,
-						},
-					})
-					if err != nil {
-						log.Print(err.Error())
-						continue
-					}
-				}
-			}()
+			r.startHeartbeat(endpoint, serviceInstance.Name+u.Scheme, host, portNum, instanceID)
 		}
 
 		ids = append(ids, instanceID)
@@ -168,10 +150,68 @@ func (r *Registry) Register(_ context.Context, serviceInstance *wind.Instance) e
 	return nil
 }
 
+// startHeartbeat launches the periodic heartbeat report loop for one endpoint.
+// The loop exits when Deregister closes the endpoint's stop signal.
+func (r *Registry) startHeartbeat(endpoint, service, host string, port int, instanceID string) {
+	interval := time.Second * time.Duration(r.opt.TTL)
+	if interval <= 0 {
+		// TTL 未配置时退回安全默认值，避免 time.NewTicker 因非正周期 panic
+		interval = 5 * time.Second
+	}
+
+	stop := make(chan struct{})
+	r.mu.Lock()
+	if old, ok := r.stops[endpoint]; ok {
+		close(old)
+	}
+	r.stops[endpoint] = stop
+	r.mu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+
+			if err := r.provider.Heartbeat(&api.InstanceHeartbeatRequest{
+				InstanceHeartbeatRequest: model.InstanceHeartbeatRequest{
+					Service:      service,
+					Namespace:    r.opt.Namespace,
+					Host:         host,
+					Port:         port,
+					ServiceToken: r.opt.ServiceToken,
+					InstanceID:   instanceID,
+					Timeout:      &r.opt.Timeout,
+					RetryCount:   &r.opt.RetryCount,
+				},
+			}); err != nil {
+				log.Print(err.Error())
+			}
+		}
+	}()
+}
+
 // Deregister the registration.
 func (r *Registry) Deregister(_ context.Context, serviceInstance *wind.Instance) error {
 	split := strings.Split(serviceInstance.ID, _instanceIDSeparator)
+	if len(split) != len(serviceInstance.Endpoints) {
+		return fmt.Errorf("polaris: deregister: got %d instance IDs (%q) for %d endpoints",
+			len(split), serviceInstance.ID, len(serviceInstance.Endpoints))
+	}
 	for i, endpoint := range serviceInstance.Endpoints {
+		// stop the heartbeat loop for this endpoint before removing the instance
+		r.mu.Lock()
+		if stop, ok := r.stops[endpoint]; ok {
+			close(stop)
+			delete(r.stops, endpoint)
+		}
+		r.mu.Unlock()
+
 		// get url
 		u, err := url.Parse(endpoint)
 		if err != nil {

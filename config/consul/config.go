@@ -21,6 +21,10 @@ type source struct {
 }
 
 func New(client *api.Client, opts ...Option) (*source, error) {
+	if client == nil {
+		return nil, errors.New("consul client is nil")
+	}
+
 	o := &options{
 		ctx:  context.Background(),
 		path: "",

@@ -22,6 +22,10 @@ type source struct {
 }
 
 func New(client polaris.ConfigAPI, opts ...Option) (*source, error) {
+	if client == nil {
+		return nil, errors.New("polaris client is nil")
+	}
+
 	o := &options{
 		namespace: "default",
 		fileGroup: "",
@@ -72,6 +76,8 @@ func (s *source) Load(ctx context.Context, key string) ([]byte, error) {
 // WatchValue implements [baseConfig.ValueWatcher].
 // It returns a channel that receives the new value each time the configuration
 // file for the given fileName (or the configured default) changes.
+// Each call registers its own change listener and forwarding goroutine, so
+// several concurrent watchers on the same file are independent.
 func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, error) {
 	fileName := s.resolveFileName(key)
 
@@ -81,22 +87,11 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 	}
 
 	out := make(chan []byte, 1)
-
-	fullPath := getFullPath(s.options.namespace, s.options.fileGroup, fileName)
-	eventChanMap[fullPath] = eventChan{
-		closed: false,
-		event:  make(chan model.ConfigFileChangeEvent),
-	}
+	eventC := make(chan model.ConfigFileChangeEvent, 1)
 
 	configFile.AddChangeListener(func(event model.ConfigFileChangeEvent) {
-		meta := event.ConfigFileMetadata
-		fp := getFullPath(meta.GetNamespace(), meta.GetFileGroup(), meta.GetFileName())
-		ec := eventChanMap[fp]
-		if ec.closed {
-			return
-		}
 		select {
-		case ec.event <- event:
+		case eventC <- event:
 		case <-ctx.Done():
 		}
 	})
@@ -106,12 +101,8 @@ func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, err
 		for {
 			select {
 			case <-ctx.Done():
-				ec := eventChanMap[fullPath]
-				if !ec.closed {
-					ec.closed = true
-				}
 				return
-			case event := <-eventChanMap[fullPath].event:
+			case event := <-eventC:
 				select {
 				case out <- []byte(event.NewValue):
 				case <-ctx.Done():
