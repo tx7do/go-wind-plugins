@@ -217,6 +217,29 @@ git tag transport/sse/v0.0.1 --force
 git tag transport/tcp/v0.0.1 --force
 git tag transport/thrift/v0.0.1 --force
 git tag transport/websocket/v0.0.1 --force
+git tag transport/v0.0.1 --force
+git tag transport/activemq/v0.0.1 --force
+git tag transport/azuresb/v0.0.1 --force
+git tag transport/gcpubsub/v0.0.1 --force
+git tag transport/http/benchmark/v0.0.1 --force
+git tag transport/http/binding/v0.0.1 --force
+git tag transport/http/redoc/v0.0.1 --force
+git tag transport/http/swagger/v0.0.1 --force
+git tag transport/http3/v0.0.1 --force
+git tag transport/kafka/v0.0.1 --force
+git tag transport/machinery/v0.0.1 --force
+git tag transport/mcp/v0.0.1 --force
+git tag transport/mqtt/v0.0.1 --force
+git tag transport/nats/v0.0.1 --force
+git tag transport/nsq/v0.0.1 --force
+git tag transport/pulsar/v0.0.1 --force
+git tag transport/rabbitmq/v0.0.1 --force
+git tag transport/redis/v0.0.1 --force
+git tag transport/rocketmq/v0.0.1 --force
+git tag transport/sqs/v0.0.1 --force
+git tag transport/trpc/v0.0.1 --force
+git tag transport/webrtc/v0.0.1 --force
+git tag transport/webtransport/v0.0.1 --force
 
 # workflow
 git tag workflow/v0.0.1 --force
@@ -228,5 +251,9 @@ git tag workflow/temporal/v0.0.1 --force
 # transaction
 git tag transaction/v0.0.1 --force
 git tag transaction/dtm/v0.0.1 --force
+git tag transaction/outbox/v0.0.1 --force
+git tag transaction/saga/v0.0.1 --force
+git tag transaction/tcc/v0.0.1 --force
+git tag transaction/xa/v0.0.1 --force
 
 git push origin --tags
