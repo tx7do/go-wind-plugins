@@ -24,6 +24,8 @@ func WithEurekaPath(path string) Option {
 	return func(o *Registry) { o.eurekaPath = path }
 }
 
-func WithMaxRetry(maxRetry int) Option {
+// MaxRetry with client request retry count. Named without the With prefix to
+// avoid clashing with the ClientOption WithMaxRetry in this package.
+func MaxRetry(maxRetry int) Option {
 	return func(o *Registry) { o.maxRetry = maxRetry }
 }
