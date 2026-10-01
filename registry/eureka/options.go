@@ -23,3 +23,7 @@ func WithRefresh(interval time.Duration) Option {
 func WithEurekaPath(path string) Option {
 	return func(o *Registry) { o.eurekaPath = path }
 }
+
+func WithMaxRetry(maxRetry int) Option {
+	return func(o *Registry) { o.maxRetry = maxRetry }
+}
