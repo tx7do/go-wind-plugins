@@ -77,6 +77,9 @@ func BindQuery(req interface{}, query url.Values) error {
 		return fmt.Errorf("binding: BindQuery requires a pointer, got %T", req)
 	}
 	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		return fmt.Errorf("binding: BindQuery requires a pointer to struct, got %T", req)
+	}
 	for key, values := range query {
 		if len(values) == 0 {
 			continue
@@ -84,6 +87,14 @@ func BindQuery(req interface{}, query url.Values) error {
 		field, err := findField(v, key)
 		if err != nil {
 			continue // 未匹配的 key 静默忽略（与主流框架一致）
+		}
+		// 先解引用指针字段再分派：使 *[]T 路由到 setSliceField；
+		// 标量指针（如 *int）由 setScalar 内部解引用，行为不变。
+		for field.Kind() == reflect.Ptr {
+			if field.IsNil() {
+				field.Set(reflect.New(field.Type().Elem()))
+			}
+			field = field.Elem()
 		}
 		if field.Kind() == reflect.Slice {
 			if err := setSliceField(field, values); err != nil {

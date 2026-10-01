@@ -127,10 +127,13 @@ func newRemoteHandler(title, description, specURL string) http.Handler {
 
 func (h *remoteDocHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 用 go-redoc 导出的 ReDoc standalone JS，内嵌到 HTML 页面中。
+	// json 助手返回 template.JS（已含一层 JS 字符串引号，视为已转义），
+	// 避免 html/template 的 JS 上下文转义再包一层引号导致 URL 双重编码
+	// （与 swagger 模块预序列化后标 template.JS 的做法一致）。
 	funcMap := template.FuncMap{
-		"json": func(v string) string {
+		"json": func(v string) template.JS {
 			b, _ := json.Marshal(v)
-			return string(b)
+			return template.JS(b)
 		},
 	}
 	t, err := template.New("redoc").Funcs(funcMap).Parse(remoteHTMLTemplate)

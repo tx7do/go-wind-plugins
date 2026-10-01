@@ -85,6 +85,9 @@ func (s *source) Load(ctx context.Context, key string) ([]byte, error) {
 // The channel is closed when ctx is cancelled or the subscription ends.
 func (s *source) WatchValue(ctx context.Context, key string) (<-chan []byte, error) {
 	path := s.resolveKey(key)
+	if path == "" {
+		return nil, errors.New("no redis key specified")
+	}
 	channel := watchChannel(path)
 
 	pubsub := s.client.Subscribe(ctx, channel)
