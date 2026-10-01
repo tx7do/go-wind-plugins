@@ -37,7 +37,7 @@
 
 ## 核心接口
 
-### 配置中心（Config）
+### 配置中心接口（Config）
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -47,7 +47,7 @@
 | `Closer` | `Close() error` | 资源释放 |
 | `Decoder` | `Decode(data, out) error` | 原始字节反序列化 |
 
-### 服务注册发现（Registry）
+### 服务注册发现接口（Registry）
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -55,7 +55,7 @@
 | `Discovery` | `GetService(ctx, name)` / `Watch(ctx, name)` | 服务发现与监听 |
 | `Watcher` | `Next(ctx) ([]*Instance, error)` / `Stop()` | 实例变更流 |
 
-### 日志（Log）
+### 日志接口（Log）
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -63,7 +63,7 @@
 | `Logger` | `With(keyvals...) Logger` | 附加上下文字段 |
 | `Logger` | `Enabled(Level) bool` | 级别判断 |
 
-### 传输层（Transport）
+### 传输层接口（Transport）
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -71,7 +71,7 @@
 | `Server` (HTTP) | `Start(ctx)` / `Stop(ctx)` / `Endpoint()` | 生命周期管理 |
 | `Driver` (HTTP) | `Handle / Start / Stop` | 框架适配驱动 |
 
-### 分布式追踪（Tracer）
+### 分布式追踪接口（Tracer）
 
 > 基于 OpenTelemetry 标准，不定义自定义接口，直接使用原生 OTel 类型。
 
@@ -81,7 +81,7 @@
 | `*sdktrace.TracerProvider` | `Shutdown(ctx)` | 关闭 provider，刷新未导出 span |
 | `trace.Tracer` | `Start(ctx, name, opts...)` | 创建 Span，注入 trace 上下文 |
 
-### 消息代理（Broker）
+### 消息代理接口（Broker）
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -96,7 +96,7 @@
 | `Event` | `Topic() / Message() / Ack() / Error()` | 订阅者收到的事件 |
 | `Subscriber` | `Unsubscribe() error` | 取消订阅 |
 
-### 指标监控（Metrics）
+### 指标监控接口（Metrics）
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
@@ -105,7 +105,7 @@
 | `Metrics` | `Gauge(ctx, name, value, labels)` | 当前瞬时值（队列深度、活跃连接数） |
 | `Closer` | `Close() error` | 关闭并刷新未发送数据 |
 
-### 编解码（Encoding）
+### 编解码接口（Encoding）
 
 | 接口/函数 | 方法 | 说明 |
 |------|------|------|
@@ -116,18 +116,18 @@
 
 ---
 
-### AI（大模型集成）
+### AI接口（大模型集成）
 
 > 三家框架的返回类型互不兼容——因此不定义抽象接口。
-> 仅提供共享配置类型 `ai.Config`。
+> 各模块各自定义**同构**的 `Config` 配置类型（字段一致、定义独立）。
 >
 > 各插件的构造函数直接返回其框架的原生类型。
 
 | 输入 | 构造函数 | 返回 |
 |-------|-------------|---------|
-| `ai.Config` | `model.NewClient(cfg)` | `*openai.Client` |
-| `ai.Config` | `eino.NewChatModel(ctx, cfg)` | `model.ChatModel`（Eino 接口） |
-| `ai.Config` | `langchaingo.NewModel(cfg)` | `llms.Model`（LangChainGo 接口） |
+| `openai.Config` | `openai.NewClient(cfg)` | `*openai.Client` |
+| `eino.Config` | `eino.NewChatModel(ctx, cfg)` | `model.ChatModel`（Eino 接口） |
+| `langchaingo.Config` | `langchaingo.NewModel(cfg)` | `llms.Model`（LangChainGo 接口） |
 
 ## 插件矩阵
 
@@ -1194,15 +1194,14 @@ import (
     "context"
     "fmt"
 
-    "github.com/tx7do/go-wind-plugins/ai"
     "github.com/tx7do/go-wind-plugins/ai/langchaingo"
 )
 
 func main() {
-    cfg := &ai.Config{
-        Type:      ai.ModelTypeCloud,
+    cfg := &langchaingo.Config{
+        Type:      langchaingo.ModelTypeCloud,
         ModelName: "gpt-4o",
-        Cloud: &ai.CloudConfig{
+        Cloud: &langchaingo.CloudConfig{
             ApiKey:  "sk-xxx",
             BaseUrl: "https://api.openai.com/v1",
         },

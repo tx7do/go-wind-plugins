@@ -126,16 +126,16 @@ b.Publish(ctx, "sensor.temperature",
 ### 3.8 AI 集成
 
 ```go
-cfg := &ai.Config{
-    Type: ai.ModelTypeCloud, ModelName: "gpt-4o",
-    Cloud: &ai.CloudConfig{ApiKey: "sk-xxx", BaseUrl: "https://api.openai.com/v1"},
+cfg := &langchaingo.Config{
+    Type: langchaingo.ModelTypeCloud, ModelName: "gpt-4o",
+    Cloud: &langchaingo.CloudConfig{ApiKey: "sk-xxx", BaseUrl: "https://api.openai.com/v1"},
     TimeoutSeconds: 60,
 }
 llm, _ := langchaingo.NewModel(cfg)
 resp, _ := llm.Call(ctx, "...")
 ```
 
-`ai.Config` 统一三框架（OpenAI / LangChainGo / Eino）的构造入参，密钥经配置层注入。见[第 18 章](./18-ai.md)。
+各模块自有的 `Config` 同构承载构造入参（字段一致、定义独立），密钥经配置层注入。见[第 18 章](./18-ai.md)。
 
 ### 3.9 数据访问层
 
