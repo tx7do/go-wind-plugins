@@ -208,6 +208,8 @@
 | Machinery | `github.com/tx7do/go-wind-plugins/transport/machinery` | machinery (类 Celery) |
 | MCP | `github.com/tx7do/go-wind-plugins/transport/mcp` | Model Context Protocol |
 
+HTTP 家族的驱动选型、三档接入方式与中间件双轨边界见 [`transport/http/STATUS.md`](transport/http/STATUS.md)，四个驱动的延迟与内存实测见 [`transport/http/benchmark/README.md`](transport/http/benchmark/README.md)。
+
 ### 分布式追踪（Tracer）
 
 | 插件 | 模块路径 | 引擎 |
