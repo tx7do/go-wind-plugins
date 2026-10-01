@@ -186,11 +186,11 @@
 | 插件 | 模块路径 | 引擎 |
 |------|---------|------|
 | HTTP (标准库) | `github.com/tx7do/go-wind-plugins/transport/http` | net/http |
-| HTTP (Chi) | `github.com/tx7do/go-wind-plugins/transport/http/chi` | go-chi/chi |
-| HTTP (Gin) | `github.com/tx7do/go-wind-plugins/transport/http/gin` | gin-gonic/gin |
-| HTTP (Fiber) | `github.com/tx7do/go-wind-plugins/transport/http/fiber` | gofiber/fiber |
+| HTTP (Chi) | `github.com/tx7do/go-wind-plugins/transport/http/driver/chi` | go-chi/chi |
+| HTTP (Gin) | `github.com/tx7do/go-wind-plugins/transport/http/driver/gin` | gin-gonic/gin |
+| HTTP (Fiber) | `github.com/tx7do/go-wind-plugins/transport/http/driver/fiber` | gofiber/fiber |
 | HTTP/3 | `github.com/tx7do/go-wind-plugins/transport/http3` | quic-go/http3 |
-| gRPC | `github.com/tx7do/go-wind-plugins/transport/grpc` | google.golang.org/grpc |
+| gRPC | `github.com/tx7do/go-wind-plugins/transport/grpc/server` | google.golang.org/grpc |
 | WebSocket | `github.com/tx7do/go-wind-plugins/transport/websocket` | gorilla/websocket |
 | Socket.IO | `github.com/tx7do/go-wind-plugins/transport/socketio` | googollee/go-socket.io |
 | SignalR | `github.com/tx7do/go-wind-plugins/transport/signalr` | SignalR 协议 |
@@ -323,10 +323,37 @@
 
 ### 安全（Security）
 
+认证引擎（`security/authn/` 下）：
+
 | 插件 | 模块路径 | 引擎 |
 |------|---------|------|
-| JWT | `github.com/tx7do/go-wind-plugins/security/authn` | golang-jwt/jwt |
-| Casbin | `github.com/tx7do/go-wind-plugins/security/authz` | casbin/casbin |
+| API Key | `github.com/tx7do/go-wind-plugins/security/authn/apikey` | API Key 比对 |
+| HTTP Basic | `github.com/tx7do/go-wind-plugins/security/authn/basicauth` | HTTP Basic 认证 |
+| HMAC | `github.com/tx7do/go-wind-plugins/security/authn/hmac` | HMAC 签名校验（时间戳+密钥防重放） |
+| JWT | `github.com/tx7do/go-wind-plugins/security/authn/jwt` | golang-jwt/jwt |
+| mTLS | `github.com/tx7do/go-wind-plugins/security/authn/mtls` | 双向 TLS 客户端证书 |
+| OAuth2 | `github.com/tx7do/go-wind-plugins/security/authn/oauth2` | OAuth2 客户端凭据 |
+| OIDC | `github.com/tx7do/go-wind-plugins/security/authn/oidc` | OpenID Connect（外部 IdP 委托认证） |
+| 预共享密钥 | `github.com/tx7do/go-wind-plugins/security/authn/presharedkey` | 静态预共享密钥比对 |
+| 会话 | `github.com/tx7do/go-wind-plugins/security/authn/session` | 服务端会话（cookie/session store） |
+
+授权引擎（`security/authz/` 下）：
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
+| ACL | `github.com/tx7do/go-wind-plugins/security/authz/acl` | 静态 ACL |
+| AWS IAM | `github.com/tx7do/go-wind-plugins/security/authz/awsiam` | AWS IAM 策略委托判定 |
+| Casbin | `github.com/tx7do/go-wind-plugins/security/authz/casbin` | casbin/casbin |
+| Cedar | `github.com/tx7do/go-wind-plugins/security/authz/cedar` | Cedar 策略引擎 |
+| Cerbos | `github.com/tx7do/go-wind-plugins/security/authz/cerbos` | Cerbos 策略引擎 |
+| OPA | `github.com/tx7do/go-wind-plugins/security/authz/opa` | Open Policy Agent（Rego） |
+| RBAC | `github.com/tx7do/go-wind-plugins/security/authz/rbac` | 基于角色的访问控制 |
+| Zanzibar | `github.com/tx7do/go-wind-plugins/security/authz/zanzibar` | ReBAC 关系元组（keto / openfga 对接） |
+
+加密模块：
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
 | Crypto | `github.com/tx7do/go-wind-plugins/security/crypto` | go-utils/crypto |
 
 ### 其他工具模块
@@ -585,6 +612,21 @@ go-wind-plugins/
 │   ├── sentinel/                   # Sentinel
 │   ├── sres/                       # SRE 自适应熔断
 │   └── vegas/                      # Vegas 自适应限流
+├── crud/                           # 数据访问层（CRUD）
+│   ├── api/                        # API 契约（protobuf 生成代码）
+│   ├── audit/                      # 审计日志
+│   ├── cache/                      # Cache-Aside 缓存
+│   ├── cassandra/                  # Cassandra 宽列存储（开发中）
+│   ├── clickhouse/                 # ClickHouse 列式 OLAP
+│   ├── doris/                      # Apache Doris 分析型数据库
+│   ├── elasticsearch/              # Elasticsearch 全文检索
+│   ├── entgo/                      # Ent 关系型 ORM（代码生成）
+│   ├── gorm/                       # GORM 关系型 ORM
+│   ├── influxdb/                   # InfluxDB 时序数据库
+│   ├── mongodb/                    # MongoDB 文档数据库
+│   ├── opensearch/                 # OpenSearch 全文检索
+│   ├── pagination/                 # 分页与过滤/排序格式转换
+│   └── viewer/                     # 身份上下文与数据范围
 ├── config/                         # 配置中心接口与插件
 │   ├── config.go                   # 标准接口定义
 │   ├── apollo/                     # 携程 Apollo
@@ -679,12 +721,28 @@ go-wind-plugins/
 ├── tracer/                         # 分布式追踪
 │   └── otlp/                       # OpenTelemetry OTLP
 │       └── otlp.go                 # 返回原生 *sdktrace.TracerProvider
+├── transaction/                    # 分布式事务接口与插件
+│   ├── transaction.go              # Client 接口定义
+│   ├── dtm/                        # DTM
+│   ├── outbox/                     # 事务性发件箱
+│   ├── saga/                       # 进程内 Saga 补偿
+│   ├── tcc/                        # 进程内 TCC
+│   └── xa/                         # XA 两阶段提交
 ├── transport/                      # 传输层接口与驱动
 │   ├── http/                       # HTTP Server + Driver 接口
 │   │   ├── server.go               # 服务端实现（路由/中间件/TLS）
-│   │   └── options.go              # 配置选项
+│   │   ├── options.go              # 配置选项
+│   │   ├── benchmark/              # 驱动基准测试
+│   │   ├── binding/                # 请求参数绑定
+│   │   ├── driver/                 # 驱动实现（std/chi/gin/fiber）
+│   │   ├── middleware/             # 标准中间件
+│   │   ├── redoc/                  # ReDoc 文档挂载
+│   │   └── swagger/                # Swagger 文档挂载
 │   ├── http3/                      # HTTP/3 (QUIC)
 │   ├── grpc/                       # gRPC
+│   │   ├── client/                 # gRPC 客户端封装
+│   │   ├── middleware/             # gRPC 拦截器
+│   │   └── server/                 # gRPC 服务器封装
 │   ├── websocket/                  # WebSocket
 │   ├── socketio/                   # Socket.IO
 │   ├── signalr/                    # SignalR
@@ -838,7 +896,7 @@ import (
     "net/http"
 
     httpPlugin "github.com/tx7do/go-wind-plugins/transport/http"
-    "github.com/tx7do/go-wind-plugins/transport/http/gin"
+    "github.com/tx7do/go-wind-plugins/transport/http/driver/gin"
 )
 
 func main() {
@@ -956,11 +1014,14 @@ package main
 
 import (
     "context"
-    "github.com/tx7do/go-wind-plugins/log/zap"
+
+    zap "go.uber.org/zap"
+    zaplog "github.com/tx7do/go-wind-plugins/log/zap"
 )
 
 func main() {
-    logger, _ := zap.NewZapLogger()
+    zlog, _ := zap.NewProduction()
+    logger := zaplog.NewZapLogger(zlog)
     logger.Info(context.Background(), "service started", "port", 8080)
     logger.With("module", "auth").Error(context.Background(), "token expired")
 }
