@@ -1,4 +1,4 @@
-go 1.26.3
+go 1.26.4
 
 // Redirect the old monolithic genproto to a version where the googleapis/rpc
 // subpackages have been split out, avoiding ambiguous import conflicts with
@@ -49,6 +49,22 @@ use (
 	./config/redis
 	./config/vault
 	./config/zookeeper
+
+	./crud/api
+	./crud/audit
+	./crud/cache
+	./crud/cassandra
+	./crud/clickhouse
+	./crud/doris
+	./crud/elasticsearch
+	./crud/entgo
+	./crud/gorm
+	./crud/influxdb
+	./crud/mongodb
+	./crud/opensearch
+	./crud/pagination
+	./crud/viewer
+
 	./encoding
 	./encoding/avro
 	./encoding/bson

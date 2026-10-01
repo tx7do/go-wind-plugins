@@ -28,7 +28,7 @@
 ## 项目亮点
 
 - **统一接口**：八大领域（Config / Registry / Log / Metrics / Transport / Broker / Encoding / Tracer）均由核心框架定义标准接口，插件只做实现
-- **多引擎支持**：12 种配置中心、8 种注册中心、14 种日志后端、3 种指标后端、4 种 HTTP 驱动、20+ 种传输层协议、12 种消息代理、11 种编解码、3 种 AI SDK、1 种 OTLP 追踪协议，覆盖主流技术栈
+- **多引擎支持**：12 种配置中心、8 种注册中心、14 种日志后端、3 种指标后端、4 种 HTTP 驱动、20+ 种传输层协议、12 种消息代理、11 种编解码、3 种 AI SDK、1 种 OTLP 追踪协议、8 种数据存储引擎，覆盖主流技术栈
 - **零侵入**：业务代码只依赖接口，不依赖具体引擎 SDK
 - **独立版本**：每个子模块独立 `go.mod`，按需引入，避免依赖膨胀
 - **Workspace 协同**：通过 `go.work` 管理多模块，开发体验如单仓项目
@@ -286,6 +286,32 @@
 | Sentinel | `github.com/tx7do/go-wind-plugins/circuitbreaker/sentinel` | alibaba/sentinel-golang |
 | SRE | `github.com/tx7do/go-wind-plugins/circuitbreaker/sres` | SRE 自适应熔断 |
 | Vegas | `github.com/tx7do/go-wind-plugins/circuitbreaker/vegas` | Vegas 自适应限流 |
+
+### 数据访问层（CRUD）
+
+> CRUD 家族的 `Repository` / `Client` 泛型接口由家族内部定义（非 go-wind 框架接口），各引擎子模块共享 api / pagination / cache / audit / viewer 设施模块。
+
+| 插件 | 模块路径 | 引擎 |
+|------|---------|------|
+| GORM | `github.com/tx7do/go-wind-plugins/crud/gorm` | GORM 关系型 ORM |
+| Ent | `github.com/tx7do/go-wind-plugins/crud/entgo` | Ent 关系型 ORM（代码生成） |
+| MongoDB | `github.com/tx7do/go-wind-plugins/crud/mongodb` | MongoDB 文档数据库 |
+| ClickHouse | `github.com/tx7do/go-wind-plugins/crud/clickhouse` | ClickHouse 列式 OLAP |
+| Apache Doris | `github.com/tx7do/go-wind-plugins/crud/doris` | Apache Doris 分析型数据库（MySQL 协议） |
+| Elasticsearch | `github.com/tx7do/go-wind-plugins/crud/elasticsearch` | Elasticsearch 全文检索 |
+| OpenSearch | `github.com/tx7do/go-wind-plugins/crud/opensearch` | OpenSearch 全文检索 |
+| InfluxDB | `github.com/tx7do/go-wind-plugins/crud/influxdb` | InfluxDB 时序数据库 |
+| Cassandra | `github.com/tx7do/go-wind-plugins/crud/cassandra` | Cassandra 宽列存储（开发中，尚未可用） |
+
+家族共享设施：
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| API 契约 | `github.com/tx7do/go-wind-plugins/crud/api` | Protobuf 分页/过滤/排序协议定义与 buf 生成代码 |
+| Pagination | `github.com/tx7do/go-wind-plugins/crud/pagination` | 分页器（Offset/Page/Token）与过滤、排序格式转换 |
+| Cache | `github.com/tx7do/go-wind-plugins/crud/cache` | Cache-Aside 缓存与 SingleFlight 防击穿 |
+| Audit | `github.com/tx7do/go-wind-plugins/crud/audit` | 审计日志接口与 Context 注入 |
+| Viewer | `github.com/tx7do/go-wind-plugins/crud/viewer` | 身份上下文与五级数据范围（行级权限） |
 
 ### 限流器（Rate Limiter）
 

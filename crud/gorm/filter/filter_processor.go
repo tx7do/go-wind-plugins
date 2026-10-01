@@ -1,0 +1,721 @@
+package filter
+
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"gorm.io/gorm"
+
+	"github.com/tx7do/go-wind-plugins/encoding"
+	_ "github.com/tx7do/go-wind-plugins/encoding/json"
+
+	"github.com/tx7do/go-utils/stringcase"
+
+	paginationV1 "github.com/tx7do/go-wind-plugins/crud/api/gen/go/pagination/v1"
+)
+
+var jsonKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_\.]+$`)
+
+// identifierPattern 列名白名单：字母/下划线开头，仅含字母、数字、下划线。
+var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// jsonExprPattern 精确匹配 JsonbFieldExpr 可生成的两类 JSON 表达式：
+//   - postgres/sqlite: `col ->> 'key'`
+//   - mysql:           `JSON_EXTRACT(col, '$.key')`
+var jsonExprPattern = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]* ->> '[A-Za-z0-9_.]+'|JSON_EXTRACT\([A-Za-z_][A-Za-z0-9_]*, '\$\.[A-Za-z0-9_.]+'\))$`)
+
+// isValidIdentifier 校验列名是否为合法标识符（防止过滤字段名注入 SQL）。
+func isValidIdentifier(identifier string) bool {
+	return identifierPattern.MatchString(strings.TrimSpace(identifier))
+}
+
+// isValidFieldExpr 校验字段名是否为合法列名，或为 JsonbFieldExpr 生成的受信任 JSON 表达式。
+// 不合法时调用方必须拒绝该条件（fail-closed），不得透传进 SQL。
+func isValidFieldExpr(field string) bool {
+	f := strings.TrimSpace(field)
+	if f == "" {
+		return false
+	}
+	return identifierPattern.MatchString(f) || jsonExprPattern.MatchString(f)
+}
+
+// Processor 过滤处理器（GORM 版）
+type Processor struct {
+	codec encoding.Codec
+}
+
+// NewProcessor 返回带 json codec 的 Processor
+func NewProcessor() *Processor {
+	return &Processor{
+		codec: encoding.GetCodec("json"),
+	}
+}
+
+// Process 将给定操作映射为对 *gorm.DB 的修改并返回修改后的 *gorm.DB
+func (poc Processor) Process(db *gorm.DB, op paginationV1.Operator, field, value string, values []string) *gorm.DB {
+	if db == nil {
+		return db
+	}
+	// 将 field 转为 snake_case（与 DB 列风格一致）。
+	// JsonbFieldExpr 生成的 JSON 表达式必须跳过转换，否则表达式结构会被拆散。
+	if !jsonExprPattern.MatchString(field) {
+		field = stringcase.ToSnakeCase(field)
+	}
+	// field 可能是列名或 JSON 表达式，两者都必须通过白名单校验，非法即拒绝（fail-closed）
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+
+	switch op {
+	case paginationV1.Operator_EQ:
+		return poc.Equal(db, field, value)
+	case paginationV1.Operator_NEQ:
+		return poc.NotEqual(db, field, value)
+	case paginationV1.Operator_IN:
+		return poc.In(db, field, value, values)
+	case paginationV1.Operator_NIN:
+		return poc.NotIn(db, field, value, values)
+	case paginationV1.Operator_GTE:
+		return poc.GTE(db, field, value)
+	case paginationV1.Operator_GT:
+		return poc.GT(db, field, value)
+	case paginationV1.Operator_LTE:
+		return poc.LTE(db, field, value)
+	case paginationV1.Operator_LT:
+		return poc.LT(db, field, value)
+	case paginationV1.Operator_BETWEEN:
+		return poc.Range(db, field, value, values)
+	case paginationV1.Operator_IS_NULL:
+		return poc.IsNull(db, field)
+	case paginationV1.Operator_IS_NOT_NULL:
+		return poc.IsNotNull(db, field)
+	case paginationV1.Operator_CONTAINS:
+		return poc.Contains(db, field, value)
+	case paginationV1.Operator_ICONTAINS:
+		return poc.InsensitiveContains(db, field, value)
+	case paginationV1.Operator_STARTS_WITH:
+		return poc.StartsWith(db, field, value)
+	case paginationV1.Operator_ISTARTS_WITH:
+		return poc.InsensitiveStartsWith(db, field, value)
+	case paginationV1.Operator_ENDS_WITH:
+		return poc.EndsWith(db, field, value)
+	case paginationV1.Operator_IENDS_WITH:
+		return poc.InsensitiveEndsWith(db, field, value)
+	case paginationV1.Operator_EXACT:
+		return poc.Exact(db, field, value)
+	case paginationV1.Operator_IEXACT:
+		return poc.InsensitiveExact(db, field, value)
+	case paginationV1.Operator_REGEXP:
+		return poc.Regex(db, field, value)
+	case paginationV1.Operator_IREGEXP:
+		return poc.InsensitiveRegex(db, field, value)
+	case paginationV1.Operator_SEARCH:
+		return poc.Search(db, field, value)
+	default:
+		return db
+	}
+}
+
+// requiresValue 报告该操作符是否必须有非空单值。
+// 与各算子方法的既有语义一致：比较/模糊匹配类空值应跳过条件（不添加 WHERE），
+// IS_NULL/IS_NOT_NULL 忽略值，IN/NIN/BETWEEN 走 values 分支。
+func requiresValue(op paginationV1.Operator) bool {
+	switch op {
+	case paginationV1.Operator_IS_NULL, paginationV1.Operator_IS_NOT_NULL,
+		paginationV1.Operator_IN, paginationV1.Operator_NIN, paginationV1.Operator_BETWEEN:
+		return false
+	default:
+		return true
+	}
+}
+
+// BuildExpression 生成单个过滤条件的参数化 SQL 片段（不带 WHERE 前缀）与参数，
+// 供 OR 组等需要把多个条件拼接成单个表达式树的场景使用（gorm v1.31.2 的
+// BuildCondition 不支持 func 闭包，OR 组此前用闭包导致整个过滤静默消失）。
+// 字段必须通过白名单校验；方言差异（ILIKE/LOWER/REGEXP/MATCH 等）与各算子
+// 方法保持一致。空值条件返回 ok=false（调用方按既有空值跳过语义处理）。
+func (poc Processor) BuildExpression(db *gorm.DB, op paginationV1.Operator, field, value string, values []string) (string, []any, bool) {
+	if db == nil || !isValidFieldExpr(field) {
+		return "", nil, false
+	}
+	// 空值跳过（修复 892425b 引入的回归：此前空值会生成 field = '' 等比较）
+	if requiresValue(op) && strings.TrimSpace(value) == "" {
+		return "", nil, false
+	}
+	dialect := strings.ToLower(db.Dialector.Name())
+
+	switch op {
+	case paginationV1.Operator_EQ:
+		return fmt.Sprintf("%s = ?", field), []any{value}, true
+	case paginationV1.Operator_NEQ:
+		// 与 NotEqual 一致：NOT (field = ?)，保留 NULL 行为
+		return fmt.Sprintf("NOT (%s = ?)", field), []any{value}, true
+	case paginationV1.Operator_GTE:
+		return fmt.Sprintf("%s >= ?", field), []any{value}, true
+	case paginationV1.Operator_GT:
+		return fmt.Sprintf("%s > ?", field), []any{value}, true
+	case paginationV1.Operator_LTE:
+		return fmt.Sprintf("%s <= ?", field), []any{value}, true
+	case paginationV1.Operator_LT:
+		return fmt.Sprintf("%s < ?", field), []any{value}, true
+	case paginationV1.Operator_IN:
+		if len(value) > 0 {
+			if jsonValues, err := poc.parseJSONValues(value); err == nil {
+				return fmt.Sprintf("%s IN ?", field), []any{jsonValues}, true
+			}
+		}
+		if len(values) > 0 {
+			anyVals := make([]any, len(values))
+			for i, v := range values {
+				anyVals[i] = v
+			}
+			return fmt.Sprintf("%s IN ?", field), []any{anyVals}, true
+		}
+		return "", nil, false
+	case paginationV1.Operator_NIN:
+		if len(value) > 0 {
+			if jsonValues, err := poc.parseJSONValues(value); err == nil {
+				return fmt.Sprintf("%s NOT IN ?", field), []any{jsonValues}, true
+			}
+		}
+		if len(values) > 0 {
+			anyVals := make([]any, len(values))
+			for i, v := range values {
+				anyVals[i] = v
+			}
+			return fmt.Sprintf("%s NOT IN ?", field), []any{anyVals}, true
+		}
+		return "", nil, false
+	case paginationV1.Operator_BETWEEN:
+		if len(value) > 0 {
+			if jsonValues, err := poc.parseJSONValues(value); err == nil && len(jsonValues) == 2 {
+				return fmt.Sprintf("%s >= ? AND %s <= ?", field, field), []any{jsonValues[0], jsonValues[1]}, true
+			}
+		}
+		if len(values) == 2 {
+			return fmt.Sprintf("%s >= ? AND %s <= ?", field, field), []any{values[0], values[1]}, true
+		}
+		return "", nil, false
+	case paginationV1.Operator_IS_NULL:
+		return fmt.Sprintf("%s IS NULL", field), nil, true
+	case paginationV1.Operator_IS_NOT_NULL:
+		return fmt.Sprintf("%s IS NOT NULL", field), nil, true
+	case paginationV1.Operator_CONTAINS:
+		return fmt.Sprintf("%s LIKE ?", field), []any{"%" + value + "%"}, true
+	case paginationV1.Operator_ICONTAINS:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("%s ILIKE ?", field), []any{"%" + value + "%"}, true
+		default:
+			return fmt.Sprintf("LOWER(%s) LIKE ?", field), []any{"%" + strings.ToLower(value) + "%"}, true
+		}
+	case paginationV1.Operator_STARTS_WITH:
+		return fmt.Sprintf("%s LIKE ?", field), []any{value + "%"}, true
+	case paginationV1.Operator_ISTARTS_WITH:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("%s ILIKE ?", field), []any{value + "%"}, true
+		default:
+			return fmt.Sprintf("LOWER(%s) LIKE ?", field), []any{strings.ToLower(value) + "%"}, true
+		}
+	case paginationV1.Operator_ENDS_WITH:
+		return fmt.Sprintf("%s LIKE ?", field), []any{"%" + value}, true
+	case paginationV1.Operator_IENDS_WITH:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("%s ILIKE ?", field), []any{"%" + value}, true
+		default:
+			return fmt.Sprintf("LOWER(%s) LIKE ?", field), []any{"%" + strings.ToLower(value)}, true
+		}
+	case paginationV1.Operator_EXACT:
+		return fmt.Sprintf("%s = ?", field), []any{value}, true
+	case paginationV1.Operator_IEXACT:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("%s ILIKE ?", field), []any{value}, true
+		default:
+			return fmt.Sprintf("LOWER(%s) = ?", field), []any{strings.ToLower(value)}, true
+		}
+	case paginationV1.Operator_REGEXP:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("%s ~ ?", field), []any{value}, true
+		case "mysql":
+			return fmt.Sprintf("%s REGEXP BINARY ?", field), []any{value}, true
+		case "sqlite":
+			return fmt.Sprintf("%s REGEXP ?", field), []any{value}, true
+		}
+	case paginationV1.Operator_IREGEXP:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("%s ~* ?", field), []any{value}, true
+		case "mysql":
+			return fmt.Sprintf("%s REGEXP ?", field), []any{value}, true
+		case "sqlite":
+			if !strings.HasPrefix(value, "(?i)") {
+				value = "(?i)" + value
+			}
+			return fmt.Sprintf("%s REGEXP ?", field), []any{value}, true
+		}
+	case paginationV1.Operator_SEARCH:
+		switch dialect {
+		case "postgres":
+			return fmt.Sprintf("to_tsvector(%s) @@ plainto_tsquery(?)", field), []any{value}, true
+		case "mysql":
+			return fmt.Sprintf("MATCH(%s) AGAINST(? IN NATURAL LANGUAGE MODE)", field), []any{value}, true
+		default:
+			return fmt.Sprintf("%s LIKE ?", field), []any{"%" + value + "%"}, true
+		}
+	}
+	return "", nil, false
+}
+
+// --- 基本比较 ---
+
+// Equal 相等比较，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) Equal(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s = ?", field), value)
+}
+
+// NotEqual 不相等比较，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) NotEqual(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	// 使用 NOT (field = ?) 以保留 NULL 行为一致性
+	return db.Not(fmt.Sprintf("%s = ?", field), value)
+}
+
+// GTE 大于等于比较，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) GTE(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s >= ?", field), value)
+}
+
+// GT 大于比较，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) GT(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s > ?", field), value)
+}
+
+// LTE 小于等于比较，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) LTE(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s <= ?", field), value)
+}
+
+// LT 小于比较，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) LT(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s < ?", field), value)
+}
+
+// --- IN / NOT IN ---
+
+// In 支持两种输入方式：1) value 作为 JSON 数组字符串；2) values 作为多个单值输入。空值不添加条件。
+func (poc Processor) In(db *gorm.DB, field, value string, values []string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if len(value) > 0 {
+		var jsonValues []any
+		if err := poc.codec.Unmarshal([]byte(value), &jsonValues); err == nil {
+			return db.Where(fmt.Sprintf("%s IN ?", field), jsonValues)
+		}
+	} else if len(values) > 0 {
+		var anyVals []any
+		for _, v := range values {
+			anyVals = append(anyVals, v)
+		}
+		return db.Where(fmt.Sprintf("%s IN ?", field), anyVals)
+	}
+	return db
+}
+
+// NotIn 支持两种输入方式：1) value 作为 JSON 数组字符串；2) values 作为多个单值输入。空值不添加条件。
+func (poc Processor) NotIn(db *gorm.DB, field, value string, values []string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if len(value) > 0 {
+		var jsonValues []any
+		if err := poc.codec.Unmarshal([]byte(value), &jsonValues); err == nil {
+			return db.Not(fmt.Sprintf("%s IN ?", field), jsonValues)
+		}
+	} else if len(values) > 0 {
+		var anyVals []any
+		for _, v := range values {
+			anyVals = append(anyVals, v)
+		}
+		return db.Not(fmt.Sprintf("%s IN ?", field), anyVals)
+	}
+	return db
+}
+
+// --- Range / Between ---
+
+// Range 支持两种输入方式：1) value 作为 JSON 数组字符串，且必须包含两个元素；2) values 作为两个单值输入。空值不添加条件。
+func (poc Processor) Range(db *gorm.DB, field, value string, values []string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if len(value) > 0 {
+		var jsonValues []any
+		if err := poc.codec.Unmarshal([]byte(value), &jsonValues); err == nil {
+			if len(jsonValues) != 2 {
+				return db
+			}
+			return db.Where(fmt.Sprintf("%s >= ? AND %s <= ?", field, field), jsonValues[0], jsonValues[1])
+		}
+	} else if len(values) == 2 {
+		return db.Where(fmt.Sprintf("%s >= ? AND %s <= ?", field, field), values[0], values[1])
+	}
+	return db
+}
+
+// --- NULL ---
+
+// IsNull IS NULL 判断
+func (poc Processor) IsNull(db *gorm.DB, field string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s IS NULL", field))
+}
+
+// IsNotNull IS NOT NULL 判断
+func (poc Processor) IsNotNull(db *gorm.DB, field string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s IS NOT NULL", field))
+}
+
+// --- 字符串 / 模糊匹配 ---
+
+// Contains 使用 LIKE '%value%' 进行包含匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) Contains(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s LIKE ?", field), "%"+value+"%")
+}
+
+// InsensitiveContains 使用 ILIKE（PostgreSQL）或 LOWER + LIKE（其他）进行大小写不敏感的包含匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) InsensitiveContains(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("%s ILIKE ?", field), "%"+value+"%")
+	default:
+		return db.Where(fmt.Sprintf("LOWER(%s) LIKE ?", field), "%"+strings.ToLower(value)+"%")
+	}
+}
+
+// StartsWith 使用 LIKE 'value%' 进行前缀匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) StartsWith(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s LIKE ?", field), value+"%")
+}
+
+// InsensitiveStartsWith 使用 ILIKE（PostgreSQL）或 LOWER + LIKE（其他）进行大小写不敏感的前缀匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) InsensitiveStartsWith(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("%s ILIKE ?", field), value+"%")
+	default:
+		return db.Where(fmt.Sprintf("LOWER(%s) LIKE ?", field), strings.ToLower(value)+"%")
+	}
+}
+
+// EndsWith 使用 LIKE '%value' 进行后缀匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) EndsWith(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	return db.Where(fmt.Sprintf("%s LIKE ?", field), "%"+value)
+}
+
+// InsensitiveEndsWith 使用 ILIKE（PostgreSQL）或 LOWER + LIKE（其他）进行大小写不敏感的后缀匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) InsensitiveEndsWith(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("%s ILIKE ?", field), "%"+value)
+	default:
+		return db.Where(fmt.Sprintf("LOWER(%s) LIKE ?", field), "%"+strings.ToLower(value))
+	}
+}
+
+// Exact 使用等于比较，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) Exact(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	// Exact 使用等于比较（与 ent 的 LIKE 精确不同）
+	return db.Where(fmt.Sprintf("%s = ?", field), value)
+}
+
+// InsensitiveExact 使用 ILIKE（PostgreSQL）或 LOWER + LIKE（其他）进行大小写不敏感的精确匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) InsensitiveExact(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("%s ILIKE ?", field), value)
+	default:
+		return db.Where(fmt.Sprintf("LOWER(%s) = ?", field), strings.ToLower(value))
+	}
+}
+
+// --- 正则 ---
+
+// Regex 根据不同数据库使用正则表达式进行匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) Regex(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("%s ~ ?", field), value)
+	case "mysql":
+		// BINARY 强制大小写敏感
+		return db.Where(fmt.Sprintf("%s REGEXP BINARY ?", field), value)
+	case "sqlite":
+		return db.Where(fmt.Sprintf("%s REGEXP ?", field), value)
+	default:
+		return db
+	}
+}
+
+// InsensitiveRegex 根据不同数据库使用正则表达式进行大小写不敏感的匹配，空值不添加条件（与 ent 的 EmptyBehavior 类似）
+func (poc Processor) InsensitiveRegex(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("%s ~* ?", field), value)
+	case "mysql":
+		return db.Where(fmt.Sprintf("%s REGEXP ?", field), value)
+	case "sqlite":
+		// SQLite 可以在 pattern 前加 (?i) 来忽略大小写
+		if !strings.HasPrefix(value, "(?i)") {
+			value = "(?i)" + value
+		}
+		return db.Where(fmt.Sprintf("%s REGEXP ?", field), value)
+	default:
+		return db
+	}
+}
+
+// --- 全文搜索 ---
+
+// Search 根据不同数据库实现全文搜索
+func (poc Processor) Search(db *gorm.DB, field, value string) *gorm.DB {
+	if !isValidFieldExpr(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	if strings.TrimSpace(value) == "" {
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("to_tsvector(%s) @@ plainto_tsquery(?)", field), value)
+	case "mysql":
+		return db.Where(fmt.Sprintf("MATCH(%s) AGAINST(? IN NATURAL LANGUAGE MODE)", field), value)
+	case "sqlite":
+		return db.Where(fmt.Sprintf("%s LIKE ?", field), "%"+value+"%")
+	default:
+		return db.Where(fmt.Sprintf("%s LIKE ?", field), "%"+value+"%")
+	}
+}
+
+// --- DatePart ---
+
+// DatePart 根据指定的 date part 对字段进行过滤（仅检查非 NULL）
+func (poc Processor) DatePart(db *gorm.DB, datePart, field string) *gorm.DB {
+	if !IsValidDatePartString(datePart) {
+		return db
+	}
+	if !isValidIdentifier(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	part := strings.ToUpper(datePart)
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return db.Where(fmt.Sprintf("EXTRACT('%s' FROM %s) IS NOT NULL", part, field))
+	case "mysql":
+		return db.Where(fmt.Sprintf("%s(%s) IS NOT NULL", part, field))
+	default:
+		return db.Where(fmt.Sprintf("EXTRACT('%s' FROM %s) IS NOT NULL", part, field))
+	}
+}
+
+// IsValidDatePartString 简单验证 date part 来源（与 paginator 共用逻辑可替换）
+func IsValidDatePartString(s string) bool {
+	if s == "" {
+		return false
+	}
+	// 允许字母与下划线
+	return regexp.MustCompile(`^[A-Za-z_]+$`).MatchString(s)
+}
+
+// --- JSONB 相关 ---
+
+// Jsonb 在 WHERE 子句中直接引用 JSON 字段的子键
+func (poc Processor) Jsonb(db *gorm.DB, jsonbField, field string) *gorm.DB {
+	jsonbField = strings.TrimSpace(jsonbField)
+	if jsonbField == "" {
+		return db
+	}
+	if !jsonKeyPattern.MatchString(jsonbField) {
+		return db
+	}
+	if !isValidIdentifier(field) {
+		_ = db.AddError(fmt.Errorf("invalid filter field %q", field))
+		return db
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		// column ->> 'key'
+		return db.Where(fmt.Sprintf("%s ->> '%s' IS NOT NULL", field, jsonbField))
+	case "mysql":
+		// JSON_EXTRACT(column, '$.key')
+		return db.Where(fmt.Sprintf("JSON_EXTRACT(%s, '$.%s') IS NOT NULL", field, jsonbField))
+	default:
+		return db.Where(fmt.Sprintf("%s ->> '%s' IS NOT NULL", field, jsonbField))
+	}
+}
+
+// JsonbFieldExpr 返回一个表达式字符串与对应参数，可用于 Select/Order 等
+func (poc Processor) JsonbFieldExpr(db *gorm.DB, jsonbField, field string) (string, []any) {
+	jsonbField = strings.TrimSpace(jsonbField)
+	if jsonbField == "" || !jsonKeyPattern.MatchString(jsonbField) {
+		return "", nil
+	}
+	if !isValidIdentifier(field) {
+		return "", nil
+	}
+	switch strings.ToLower(db.Dialector.Name()) {
+	case "postgres":
+		return fmt.Sprintf("%s ->> '%s'", field, jsonbField), nil
+	case "mysql":
+		return fmt.Sprintf("JSON_EXTRACT(%s, '$.%s')", field, jsonbField), nil
+	default:
+		return fmt.Sprintf("%s ->> '%s'", field, jsonbField), nil
+	}
+}
+
+// JsonbField 返回 JSONB 子字段在 SQL 中的字符串表示（可直接用于 Select）
+func (poc Processor) JsonbField(db *gorm.DB, jsonbField, field string) string {
+	expr, _ := poc.JsonbFieldExpr(db, jsonbField, field)
+	return expr
+}
+
+// parseJSONValues 解析 JSON 字符串为 slice(any)
+func (poc Processor) parseJSONValues(raw string) ([]any, error) {
+	var arr []any
+	if err := poc.codec.Unmarshal([]byte(raw), &arr); err != nil {
+		// fallback to standard json.Unmarshal
+		if err2 := json.Unmarshal([]byte(raw), &arr); err2 != nil {
+			return nil, err
+		}
+	}
+	return arr, nil
+}

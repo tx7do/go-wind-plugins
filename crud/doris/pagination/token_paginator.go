@@ -1,0 +1,46 @@
+package pagination
+
+import (
+	"github.com/tx7do/go-wind-plugins/crud/doris/query"
+	"github.com/tx7do/go-wind-plugins/crud/pagination"
+	"github.com/tx7do/go-wind-plugins/crud/pagination/paginator"
+)
+
+// TokenPaginator 基于 Token 的分页器（Doris 版）
+// BuildClause 返回可直接拼接到 Doris 查询的子句，形式为:
+// - 当 token 为空或无效时: "LIMIT <n>"
+// - 当 token 有效且包含 last_id 时: "WHERE id > <last_id> LIMIT <n>"
+type TokenPaginator struct {
+	impl pagination.Paginator
+}
+
+func NewTokenPaginator() *TokenPaginator {
+	return &TokenPaginator{
+		impl: paginator.NewTokenPaginatorWithDefault(),
+	}
+}
+
+// BuildClause 根据传入 token/pageSize 更新状态并返回 Doris 的 WHERE/LIMIT 子句。
+// 若 pageSize <= 0 或解析失败则返回空字符串或仅 LIMIT。
+func (p *TokenPaginator) BuildClause(builder *query.Builder, token string, pageSize int) *query.Builder {
+	p.impl.
+		WithToken(token).
+		WithSize(pageSize)
+
+	size := p.impl.Size()
+	if size <= 0 {
+		return builder
+	}
+
+	// 无 token 或无法解码时仅返回 LIMIT
+	if token == "" {
+		return builder.Limit(size)
+	}
+
+	lastID, ok := pagination.VerifyAndDecode(token, pagination.TokenSecret())
+	if !ok {
+		return builder.Limit(size)
+	}
+
+	return builder.Limit(size).Where("id > ?", lastID)
+}

@@ -1,0 +1,11 @@
+﻿syntax = "proto3";
+
+package gorm;
+
+option go_package = "github.com/tx7do/go-wind-plugins/crud/entgo;entgo";
+
+message User {
+  uint32 id = 1;
+  string name = 2;
+  optional uint32 age = 3;
+}

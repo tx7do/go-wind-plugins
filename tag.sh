@@ -47,6 +47,22 @@ git tag config/redis/v0.0.1 --force
 git tag config/vault/v0.0.1 --force
 git tag config/zookeeper/v0.0.1 --force
 
+# crud
+git tag crud/api/v0.0.1 --force
+git tag crud/audit/v0.0.1 --force
+git tag crud/cache/v0.0.1 --force
+git tag crud/cassandra/v0.0.1 --force
+git tag crud/clickhouse/v0.0.1 --force
+git tag crud/doris/v0.0.1 --force
+git tag crud/elasticsearch/v0.0.1 --force
+git tag crud/entgo/v0.0.1 --force
+git tag crud/gorm/v0.0.1 --force
+git tag crud/influxdb/v0.0.1 --force
+git tag crud/mongodb/v0.0.1 --force
+git tag crud/opensearch/v0.0.1 --force
+git tag crud/pagination/v0.0.1 --force
+git tag crud/viewer/v0.0.1 --force
+
 # encoding
 git tag encoding/v0.0.1 --force
 git tag encoding/avro/v0.0.1 --force

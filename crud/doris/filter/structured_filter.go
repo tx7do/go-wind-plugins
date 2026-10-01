@@ -1,0 +1,249 @@
+package filter
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/tx7do/go-wind-plugins/encoding"
+	"github.com/tx7do/go-wind/log"
+
+	"github.com/tx7do/go-utils/stringcase"
+
+	paginationV1 "github.com/tx7do/go-wind-plugins/crud/api/gen/go/pagination/v1"
+	"github.com/tx7do/go-wind-plugins/crud/doris/query"
+)
+
+// StructuredFilter 基于 FilterExpr 的 Doris 过滤器（不依赖 GORM）
+type StructuredFilter struct {
+	codec     encoding.Codec
+	processor *Processor
+}
+
+func NewStructuredFilter() *StructuredFilter {
+	return &StructuredFilter{
+		codec:     encoding.GetCodec("json"),
+		processor: NewProcessor(),
+	}
+}
+
+// BuildSelectors 将 FilterExpr 转为并直接应用于 *query.Builder 的 WHERE/ARGS
+func (sf StructuredFilter) BuildSelectors(builder *query.Builder, expr *paginationV1.FilterExpr) (*query.Builder, error) {
+	if builder == nil {
+		return nil, fmt.Errorf("builder is nil")
+	}
+	if expr == nil {
+		return builder, nil
+	}
+	if expr.GetType() == paginationV1.ExprType_EXPR_TYPE_UNSPECIFIED {
+		log.Warn(context.Background(), "Skipping unspecified FilterExpr")
+		return builder, nil
+	}
+
+	parts, partsArgs, err := sf.buildParts(expr)
+	if err != nil {
+		return builder, err
+	}
+	// 将每个生成的子表达式追加到 builder
+	for i, p := range parts {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		if len(partsArgs) > i && len(partsArgs[i]) > 0 {
+			builder.Where(p, partsArgs[i]...)
+		} else {
+			builder.Where(p)
+		}
+	}
+	return builder, nil
+}
+
+// buildParts 将 expr 展开为若干子表达式及其对应参数列表（不直接修改 builder）
+func (sf StructuredFilter) buildParts(expr *paginationV1.FilterExpr) ([]string, [][]any, error) {
+	if expr == nil {
+		return nil, nil, nil
+	}
+	if expr.GetType() == paginationV1.ExprType_EXPR_TYPE_UNSPECIFIED {
+		return nil, nil, nil
+	}
+
+	// helper: 根据 condition 生成单个 SQL 片段和参数
+	buildCond := func(cond *paginationV1.FilterCondition) (string, []any, error) {
+		if cond == nil {
+			return "", nil, nil
+		}
+		field := cond.GetField()
+		val := ""
+		switch cond.ValueOneof.(type) {
+		case *paginationV1.FilterCondition_Value:
+			val = cond.GetValue()
+		default:
+		}
+		opName := cond.GetOp().String()
+		values := cond.GetValues()
+
+		// 支持 JSON 字段 (e.g. preferences.daily_email) -> JSONExtractString(col, 'key')
+		// 字段名与 JSON key 均来自客户端可设的 FilterExpr，必须严格校验，防止引号逃逸注入。
+		isJSON := strings.Contains(field, ".")
+		var colExpr string
+		if isJSON {
+			parts := strings.SplitN(field, ".", 2)
+			col := stringcase.ToSnakeCase(parts[0])
+			jsonKey := parts[1]
+			if !isValidIdentifier(col) || !jsonKeyPattern.MatchString(jsonKey) {
+				return "", nil, fmt.Errorf("invalid filter field %q", field)
+			}
+			colExpr = fmt.Sprintf("JSONExtractString(%s, '%s')", col, jsonKey)
+		} else {
+			col := stringcase.ToSnakeCase(field)
+			if !isValidIdentifier(col) {
+				return "", nil, fmt.Errorf("invalid filter field %q", field)
+			}
+			colExpr = col
+		}
+
+		switch opName {
+		case "OP_EQ", "EQ", "EQUAL", "OP_EQUAL":
+			return fmt.Sprintf("%s = ?", colExpr), []any{val}, nil
+		case "OP_NEQ", "NE", "NEQ", "OP_NOT_EQUAL":
+			return fmt.Sprintf("%s != ?", colExpr), []any{val}, nil
+		case "OP_GT", "GT":
+			return fmt.Sprintf("%s > ?", colExpr), []any{val}, nil
+		case "OP_GTE", "GTE":
+			return fmt.Sprintf("%s >= ?", colExpr), []any{val}, nil
+		case "OP_LT", "LT":
+			return fmt.Sprintf("%s < ?", colExpr), []any{val}, nil
+		case "OP_LTE", "LTE":
+			return fmt.Sprintf("%s <= ?", colExpr), []any{val}, nil
+		case "OP_IS_NULL", "IS_NULL":
+			return fmt.Sprintf("%s IS NULL", colExpr), nil, nil
+		case "OP_IS_NOT_NULL", "IS_NOT_NULL":
+			return fmt.Sprintf("%s IS NOT NULL", colExpr), nil, nil
+		case "OP_IN", "IN":
+			// 支持 values 列表，否则如果只有 Value 则解析逗号分隔
+			var args []any
+			if len(values) > 0 {
+				for _, v := range values {
+					args = append(args, v)
+				}
+			} else if val != "" {
+				parts := strings.Split(val, ",")
+				for _, p := range parts {
+					args = append(args, strings.TrimSpace(p))
+				}
+			}
+			if len(args) == 0 {
+				return "1 = 0", nil, nil
+			}
+			ps := strings.Repeat("?,", len(args))
+			ps = strings.TrimRight(ps, ",")
+			return fmt.Sprintf("%s IN (%s)", colExpr, ps), args, nil
+		case "OP_BETWEEN", "BETWEEN":
+			if len(values) >= 2 {
+				return fmt.Sprintf("%s BETWEEN ? AND ?", colExpr), []any{values[0], values[1]}, nil
+			}
+			parts := strings.Split(val, ",")
+			if len(parts) >= 2 {
+				return fmt.Sprintf("%s BETWEEN ? AND ?", colExpr), []any{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}, nil
+			}
+			return fmt.Sprintf("%s = ?", colExpr), []any{val}, nil
+		case "OP_CONTAINS", "CONTAINS", "OP_LIKE", "LIKE":
+			p := "%" + val + "%"
+			return fmt.Sprintf("%s LIKE ?", colExpr), []any{p}, nil
+		case "OP_STARTS_WITH", "STARTS_WITH":
+			p := val + "%"
+			return fmt.Sprintf("%s LIKE ?", colExpr), []any{p}, nil
+		case "OP_ENDS_WITH", "ENDS_WITH":
+			p := "%" + val
+			return fmt.Sprintf("%s LIKE ?", colExpr), []any{p}, nil
+		default:
+			if val != "" {
+				return fmt.Sprintf("%s = ?", colExpr), []any{val}, nil
+			}
+			return "", nil, nil
+		}
+	}
+
+	flatten := func(arr [][]any) []any {
+		var out []any
+		for _, a := range arr {
+			if len(a) > 0 {
+				out = append(out, a...)
+			}
+		}
+		return out
+	}
+
+	var parts []string
+	var partsArgs [][]any
+
+	switch expr.GetType() {
+	case paginationV1.ExprType_AND:
+		// 条件集合
+		for _, cond := range expr.GetConditions() {
+			clause, args, err := buildCond(cond)
+			if err != nil {
+				return nil, nil, err
+			}
+			if clause == "" {
+				continue
+			}
+			parts = append(parts, clause)
+			partsArgs = append(partsArgs, args)
+		}
+		// 子组按 AND 语义合并为单个带括号的表达式并作为一个部分追加
+		for _, g := range expr.GetGroups() {
+			subParts, subArgs, err := sf.buildParts(g)
+			if err != nil {
+				log.Error(context.Background(), fmt.Sprintf("buildParts sub-group error: %v", err))
+				continue
+			}
+			if len(subParts) == 0 {
+				continue
+			}
+			joined := strings.Join(subParts, " AND ")
+			parts = append(parts, "("+joined+")")
+			partsArgs = append(partsArgs, flatten(subArgs))
+		}
+		return parts, partsArgs, nil
+
+	case paginationV1.ExprType_OR:
+		var orParts []string
+		var orArgs [][]any
+		// 条件集合作为 OR 的子项
+		for _, cond := range expr.GetConditions() {
+			clause, args, err := buildCond(cond)
+			if err != nil {
+				return nil, nil, err
+			}
+			if clause == "" {
+				continue
+			}
+			orParts = append(orParts, clause)
+			orArgs = append(orArgs, args)
+		}
+		// 子组作为 OR 的子项，子组内部以 AND 连接
+		for _, g := range expr.GetGroups() {
+			subParts, subArgs, err := sf.buildParts(g)
+			if err != nil {
+				log.Error(context.Background(), fmt.Sprintf("buildParts sub-group error: %v", err))
+				continue
+			}
+			if len(subParts) == 0 {
+				continue
+			}
+			joined := strings.Join(subParts, " AND ")
+			orParts = append(orParts, "("+joined+")")
+			orArgs = append(orArgs, flatten(subArgs))
+		}
+		if len(orParts) > 0 {
+			parts = append(parts, "("+strings.Join(orParts, " OR ")+")")
+			partsArgs = append(partsArgs, flatten(orArgs))
+		}
+		return parts, partsArgs, nil
+
+	default:
+		// 未知类型：跳过
+		return nil, nil, nil
+	}
+}
