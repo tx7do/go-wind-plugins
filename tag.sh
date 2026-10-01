@@ -130,6 +130,12 @@ git tag registry/polaris/v0.0.1 --force
 git tag registry/servicecomb/v0.0.1 --force
 git tag registry/zookeeper/v0.0.1 --force
 
+# selector
+git tag selector/v0.0.1 --force
+
+# resolver
+git tag resolver/v0.0.1 --force
+
 # retry
 git tag retry/v0.0.1 --force
 
