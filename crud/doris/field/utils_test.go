@@ -33,6 +33,26 @@ func TestNormalizePaths_InvalidPathDropped(t *testing.T) {
 	}
 }
 
+// TestMaskSet_UnwrapsBackticks 验证 MaskSet 剥离反引号，
+// 掩码集合能与原始列名匹配（修复掩码更新静默失效）。
+func TestMaskSet_UnwrapsBackticks(t *testing.T) {
+	fm := &fieldmaskpb.FieldMask{Paths: []string{"`name`", "`update_time`"}}
+	mask := MaskSet(fm)
+	if !mask["name"] || !mask["update_time"] {
+		t.Errorf("MaskSet must unwrap backticked paths, got %v", mask)
+	}
+
+	// 未归一化的原始路径同样可用
+	mask2 := MaskSet(&fieldmaskpb.FieldMask{Paths: []string{"status"}})
+	if !mask2["status"] {
+		t.Errorf("raw path must be kept, got %v", mask2)
+	}
+
+	if got := MaskSet(nil); len(got) != 0 {
+		t.Errorf("nil mask must be empty, got %v", got)
+	}
+}
+
 // TestNormalizePaths_Idempotent 验证归一化幂等：已归一化（反引号包裹）的合法
 // 标识符再次归一化保持不变，因此 Repository.Get 先 NormalizeFieldMaskPaths
 // 再经 BuildSelector 二次归一化不会把路径判为非法。
@@ -64,25 +84,5 @@ func TestNormalizePaths_Idempotent(t *testing.T) {
 	// a backtick-wrapped invalid payload is still rejected
 	if out := NormalizePaths([]string{"`a`,(select version()),`b`"}); out[0] != "" {
 		t.Errorf("quoted injection payload must be dropped, got %q", out[0])
-	}
-}
-
-// TestMaskSet_UnwrapsBackticks 验证 MaskSet 剥离反引号，
-// 掩码集合能与原始列名匹配（修复掩码更新静默失效）。
-func TestMaskSet_UnwrapsBackticks(t *testing.T) {
-	fm := &fieldmaskpb.FieldMask{Paths: []string{"`name`", "`update_time`"}}
-	mask := MaskSet(fm)
-	if !mask["name"] || !mask["update_time"] {
-		t.Errorf("MaskSet must unwrap backticked paths, got %v", mask)
-	}
-
-	// 未归一化的原始路径同样可用
-	mask2 := MaskSet(&fieldmaskpb.FieldMask{Paths: []string{"status"}})
-	if !mask2["status"] {
-		t.Errorf("raw path must be kept, got %v", mask2)
-	}
-
-	if got := MaskSet(nil); len(got) != 0 {
-		t.Errorf("nil mask must be empty, got %v", got)
 	}
 }
