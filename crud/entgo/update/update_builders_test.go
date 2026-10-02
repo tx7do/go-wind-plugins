@@ -106,6 +106,10 @@ func TestExtractJsonFieldKeyValues(t *testing.T) {
 	// without snake-casing the original path is used as the key
 	got = ExtractJsonFieldKeyValues(msg, []string{"bool_val"}, false)
 	require.Equal(t, []string{"'bool_val'", "true"}, got)
+
+	// nil (and typed-nil) messages extract nothing instead of panicking
+	require.Nil(t, ExtractJsonFieldKeyValues(nil, []string{"string_val"}, true))
+	require.Nil(t, ExtractJsonFieldKeyValues((*dynamicpb.Message)(nil), []string{"string_val"}, true))
 }
 
 func TestSetJsonFieldValueUpdateBuilder(t *testing.T) {
@@ -124,10 +128,9 @@ func TestSetJsonFieldValueUpdateBuilder(t *testing.T) {
 
 	// no extractable values => no modifier
 	require.Nil(t, SetJsonFieldValueUpdateBuilder("meta", msg, []string{"missing", "empty_val"}, true))
-	// NOTE (upstream bug, reported not fixed): a valid column combined with a
-	// nil proto message panics inside ExtractJsonFieldKeyValues
-	// (msg.ProtoReflect() on a nil message), so that combination is not
-	// exercised here.
+	// a nil proto message extracts nothing => no modifier (previously panicked)
+	require.Nil(t, SetJsonFieldValueUpdateBuilder("meta", nil, []string{"string_val"}, true))
+	require.Nil(t, SetJsonFieldValueUpdateBuilder("meta", (*dynamicpb.Message)(nil), []string{"string_val"}, true))
 	// non-identifier column names are rejected outright
 	require.Nil(t, SetJsonFieldValueUpdateBuilder(`me"ta`, msg, []string{"stringVal"}, true))
 }

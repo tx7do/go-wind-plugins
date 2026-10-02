@@ -154,9 +154,13 @@ func TestExtractMessageType(t *testing.T) {
 }
 
 func TestMessageHandlerData_Create(t *testing.T) {
-	// NOTE: Create() is not nil-receiver safe (it dereferences h.Creator
-	// without a nil-receiver check and panics on a nil *MessageHandlerData);
-	// this test only exercises non-nil receivers.
+	// nil receiver is safe and degrades to nil, matching how callers treat
+	// nil handler data (the payload falls back to the raw bytes).
+	var nilHandler *MessageHandlerData
+	if got := nilHandler.Create(); got != nil {
+		t.Errorf("Create() on nil receiver = %v, want nil", got)
+	}
+
 	h := &MessageHandlerData{}
 	if got := h.Create(); got != nil {
 		t.Errorf("Create() without Creator = %v, want nil", got)

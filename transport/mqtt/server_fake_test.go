@@ -288,8 +288,13 @@ func TestServerStartSubscribeError(t *testing.T) {
 
 	err := srv.Start(context.Background())
 	assert.ErrorIs(t, err, fb.subscribeErr)
-	// Current behavior: started flips true before the deferred
-	// subscriptions are flushed, so it stays true after the failure.
+	// On subscribe failure Start unwinds via Stop: the server must not
+	// stay half-started, and a retry must succeed.
+	assert.False(t, srv.started.Load())
+
+	// Retry with the broker healthy.
+	fb.subscribeErr = nil
+	require.NoError(t, srv.Start(context.Background()))
 	assert.True(t, srv.started.Load())
 
 	require.NoError(t, srv.Stop(context.Background()))

@@ -8,16 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestClient_NilReceiver verifies the nil-receiver guards: Close and Closed
-// tolerate a nil *Client.
-//
-// NOTE: Session() is NOT nil-receiver safe (it dereferences c.session without
-// a nil check and panics on a nil *Client), unlike Close/Closed. This test
-// intentionally avoids calling it on a nil receiver.
+// TestClient_NilReceiver verifies the nil-receiver guards: Close, Closed and
+// Session tolerate a nil *Client.
 func TestClient_NilReceiver(t *testing.T) {
 	var c *Client
 	assert.NotPanics(t, func() { c.Close() })
 	assert.True(t, c.Closed())
+	assert.Nil(t, c.Session())
 }
 
 // TestClient_ZeroClient_SessionReturnsNil checks the Session accessor on a
