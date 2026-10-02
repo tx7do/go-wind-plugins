@@ -568,9 +568,25 @@ func TestWorkerStopTwiceIsSafe(t *testing.T) {
 	}
 }
 
-// NOTE: WaitForCompletion is only safe to call after a worker was started and
-// stopped; on a never-started worker it blocks indefinitely (upstream go-workflows
-// behavior), so there is deliberately no test for that case.
+// WaitForCompletion on a never-started worker must fail fast instead of
+// blocking forever on upstream go-workflows completion signals that only
+// exist after Start.
+func TestWaitForCompletionNeverStarted(t *testing.T) {
+	mb := newMockBackend()
+	ww, err := NewWorker(mb, &WorkerOptions{WorkflowPollers: 1, ActivityPollers: 1})
+	if err != nil {
+		t.Fatalf("NewWorker returned error: %v", err)
+	}
+	if ww.IsRunning() {
+		t.Fatal("expected fresh worker to not be running")
+	}
+
+	// No goroutine/timeouts needed: the call must return immediately.
+	err = ww.WaitForCompletion()
+	if err == nil || !contains(err.Error(), "worker was never started") {
+		t.Errorf("expected never-started error, got %v", err)
+	}
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// toWorkerOptions full coverage

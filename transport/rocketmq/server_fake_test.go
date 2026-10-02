@@ -500,6 +500,10 @@ func TestServerOptions(t *testing.T) {
 	// Name servers live in the rocketmq option context, not in
 	// broker.Options.Addrs.
 	assert.NotNil(t, opts.Codec)
+	// 已知限制（见 WithTLSConfig 文档）：这些断言只保证 TLS 配置被装配进
+	// broker Options。底层 rocketmq 驱动（aliyun / v2 / v5 SDK）既不消费
+	// TLSConfig 也不消费 Secure——v5 SDK 的连接级 TLS 选项在其 client
+	// manager 内部被丢弃，TLS 配置在该驱动上是显式的不支持项。
 	assert.True(t, opts.Secure)
 	assert.NotNil(t, opts.TLSConfig)
 	// Functions cannot be compared for equality with assert.Equal.

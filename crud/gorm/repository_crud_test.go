@@ -490,14 +490,22 @@ func TestRepository_UpdateVariants(t *testing.T) {
 	}
 
 	// Update applies the change and returns the refreshed DTO.
-	// Note: the WHERE clause must not reference the columns being changed,
-	// because the read-back query reuses the same clause.
 	updated, err := r.Update(ctx, db.Where("id = ?", 1), &CacheTestUser{Id: 1, Name: "alice2", Age: 21}, nil)
 	if err != nil {
 		t.Fatalf("Update error: %v", err)
 	}
 	if updated == nil || updated.Name != "alice2" || updated.Age != 21 {
 		t.Fatalf("unexpected updated dto: %+v", updated)
+	}
+
+	// Regression: the WHERE clause may reference the very column being changed.
+	// The read-back goes by primary key, so the update still returns the row.
+	updated, err = r.Update(ctx, db.Where("name = ?", "alice2"), &CacheTestUser{Id: 1, Name: "alice2b", Age: 21}, nil)
+	if err != nil {
+		t.Fatalf("Update(changing filtered column) error: %v", err)
+	}
+	if updated == nil || updated.Name != "alice2b" || updated.Age != 21 {
+		t.Fatalf("Update(changing filtered column) unexpected dto: %+v", updated)
 	}
 
 	// Update with mask only touches the selected column

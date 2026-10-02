@@ -174,9 +174,16 @@ func TestInit_ErrorWhileConnected(t *testing.T) {
 	b := NewBroker().(*pubsubBroker)
 	b.pool = &redis.Pool{} // simulate connected state
 
-	err := b.Init()
+	// 无新选项的 Init 在已连接状态下幂等成功（Connect 先于 Init 是合法顺序，
+	// 例如先 srv.Connect() 再 srv.Start()）。
+	if err := b.Init(); err != nil {
+		t.Fatalf("Init() without options while connected should be idempotent, got %v", err)
+	}
+
+	// 携带新选项的 Init 仍然拒绝，防止活跃连接池感知不到的配置漂移。
+	err := b.Init(broker.WithAddress("127.0.0.1:9999"))
 	if err == nil {
-		t.Fatal("Init() while connected should return an error")
+		t.Fatal("Init() with new options while connected should return an error")
 	}
 	if !strings.Contains(err.Error(), "cannot init while connected") {
 		t.Errorf("Init() error = %v, want it to mention \"cannot init while connected\"", err)

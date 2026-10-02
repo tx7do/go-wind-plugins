@@ -36,11 +36,17 @@ type fakeConductor struct {
 	body     string
 }
 
-func newFakeConductor(t *testing.T) (*fakeConductor, *WorkflowClient) {
+func newFakeConductorServer(t *testing.T) *fakeConductor {
 	t.Helper()
 	fc := &fakeConductor{}
 	fc.srv = httptest.NewServer(http.HandlerFunc(fc.handle))
 	t.Cleanup(fc.srv.Close)
+	return fc
+}
+
+func newFakeConductor(t *testing.T) (*fakeConductor, *WorkflowClient) {
+	t.Helper()
+	fc := newFakeConductorServer(t)
 
 	client, err := NewClient(ClientOptions{ServerURL: fc.srv.URL})
 	if err != nil {
@@ -441,6 +447,17 @@ func TestNewClientFromEnv(t *testing.T) {
 	if client.WorkflowExecutor() == nil {
 		t.Error("expected non-nil WorkflowExecutor")
 	}
+
+	// Environment values must be stored as the client's effective options,
+	// not a zero ClientOptions.
+	if client.options.ServerURL != "http://127.0.0.1:8081/api" {
+		t.Errorf("options.ServerURL = %q, want the CONDUCTOR_SERVER_URL value", client.options.ServerURL)
+	}
+	if client.options.AuthKey != "env-key" || client.options.AuthSecret != "env-secret" {
+		t.Errorf("options credentials = %q/%q, want the CONDUCTOR_AUTH_* values",
+			client.options.AuthKey, client.options.AuthSecret)
+	}
+
 	if err := client.Close(); err != nil {
 		t.Errorf("Close returned error: %v", err)
 	}
@@ -449,6 +466,45 @@ func TestNewClientFromEnv(t *testing.T) {
 	client.mu.RUnlock()
 	if running {
 		t.Error("expected client to be stopped after Close")
+	}
+}
+
+// Explicitly-set ClientOptions fields must override the environment values:
+// the env URL points at a dead address, so the request can only succeed if
+// the option took effect.
+func TestNewClientFromEnvOptionsOverride(t *testing.T) {
+	fc := newFakeConductorServer(t)
+
+	t.Setenv("CONDUCTOR_SERVER_URL", "http://127.0.0.1:1/api")
+	t.Setenv("CONDUCTOR_AUTH_KEY", "env-key")
+	t.Setenv("CONDUCTOR_AUTH_SECRET", "env-secret")
+
+	client, err := NewClientFromEnv(ClientOptions{ServerURL: fc.srv.URL})
+	if err != nil {
+		t.Fatalf("NewClientFromEnv returned error: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	if client.options.ServerURL != fc.srv.URL {
+		t.Errorf("options.ServerURL = %q, want the option to override the env value", client.options.ServerURL)
+	}
+	// Fields not set in the options must still fall back to the environment.
+	if client.options.AuthKey != "env-key" || client.options.AuthSecret != "env-secret" {
+		t.Errorf("options credentials = %q/%q, want the env values", client.options.AuthKey, client.options.AuthSecret)
+	}
+
+	id, err := client.StartWorkflow(context.Background(), StartWorkflowOptions{
+		Name: "env_override_workflow",
+	})
+	if err != nil {
+		t.Fatalf("StartWorkflow returned error: %v", err)
+	}
+	if id != "wf-id-123" {
+		t.Errorf("expected workflow id wf-id-123, got %s", id)
+	}
+	rec := fc.lastRequest()
+	if rec.Method != http.MethodPost || rec.Path != "/workflow" {
+		t.Errorf("request did not reach the option-supplied server: %+v", rec)
 	}
 }
 

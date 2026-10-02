@@ -208,16 +208,35 @@ func TestBuildFindOne_WithFilterAndOptions(t *testing.T) {
 
 	fresh := &optionsV2.FindOneOptions{}
 	fns := lister.List()
-	// NOTE: only Skip is propagated to FindOne options. SetSort/SetProjection
-	// stay on FindOptions and are silently dropped by BuildFindOne — see report.
-	require.Len(t, fns, 1)
+	// SetSort/SetProjection write to FindOptions; BuildFindOne must propagate
+	// them so FindOne does not silently lose sort/projection.
+	require.Len(t, fns, 3) // skip, sort, projection
 	for _, fn := range fns {
 		require.NoError(t, fn(fresh))
 	}
 	require.NotNil(t, fresh.Skip)
 	assert.Equal(t, int64(5), *fresh.Skip)
-	assert.Nil(t, fresh.Sort)
-	assert.Nil(t, fresh.Projection)
+	assert.Equal(t, bsonV2.D{{Key: "createdAt", Value: -1}}, fresh.Sort)
+	assert.Equal(t, bsonV2.M{"name": 1, "createdAt": 1}, fresh.Projection)
+}
+
+func TestBuildFindOne_PreservesExplicitFindOneOptions(t *testing.T) {
+	qb := NewQueryBuilder()
+	qb.SetSort(bsonV2.D{{Key: "a", Value: 1}})
+	qb.SetProjection(bsonV2.M{"a": 1})
+	// Explicitly set FindOne options win over the FindOptions ones.
+	explicitSort := bsonV2.D{{Key: "b", Value: -1}}
+	qb.findOneOpts.Sort = explicitSort
+
+	_, lister, err := qb.BuildFindOne()
+	require.NoError(t, err)
+
+	fresh := &optionsV2.FindOneOptions{}
+	for _, fn := range lister.List() {
+		require.NoError(t, fn(fresh))
+	}
+	assert.Equal(t, explicitSort, fresh.Sort)
+	assert.Equal(t, bsonV2.M{"a": 1}, fresh.Projection)
 }
 
 func TestBuildFindOne_NilFilterReturnsEmptyFilter(t *testing.T) {

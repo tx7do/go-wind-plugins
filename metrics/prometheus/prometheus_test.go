@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -287,6 +288,75 @@ func TestGauge_WithLabels(t *testing.T) {
 		if got := m.Gauge.GetValue(); got != want {
 			t.Errorf("queue %s gauge = %v, want %v", labels["queue"], got, want)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate registration
+// ---------------------------------------------------------------------------
+
+// Recording the same metric name first without labels and then with labels
+// (or the reverse) collides in the registry. The panic must name the
+// conflicting metric and explain the label-dimension mismatch instead of
+// promauto's bare "duplicate metrics collector registration attempted".
+func TestMetricLabelDimensionConflict_PanicNamesMetric(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name     string
+		wantName string
+		first    func(p *Provider)
+		then     func(p *Provider)
+	}{
+		{
+			name:     "counter without then with labels",
+			wantName: "conflict_total",
+			first:    func(p *Provider) { p.Counter(ctx, "conflict_total", 1, nil) },
+			then:     func(p *Provider) { p.Counter(ctx, "conflict_total", 1, map[string]string{"method": "GET"}) },
+		},
+		{
+			name:     "histogram without then with labels",
+			wantName: "conflict_seconds",
+			first:    func(p *Provider) { p.Histogram(ctx, "conflict_seconds", 1, nil) },
+			then:     func(p *Provider) { p.Histogram(ctx, "conflict_seconds", 1, map[string]string{"route": "/"}) },
+		},
+		{
+			name:     "gauge without then with labels",
+			wantName: "conflict_gauge",
+			first:    func(p *Provider) { p.Gauge(ctx, "conflict_gauge", 1, nil) },
+			then:     func(p *Provider) { p.Gauge(ctx, "conflict_gauge", 1, map[string]string{"queue": "orders"}) },
+		},
+		{
+			name:     "gauge with then without labels",
+			wantName: "conflict_reverse",
+			first:    func(p *Provider) { p.Gauge(ctx, "conflict_reverse", 1, map[string]string{"queue": "orders"}) },
+			then:     func(p *Provider) { p.Gauge(ctx, "conflict_reverse", 1, nil) },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := New()
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+			tt.first(p)
+
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("expected a panic when the metric name is re-registered with different label dimensions")
+				}
+				msg, ok := r.(string)
+				if !ok {
+					t.Fatalf("panic value = %T (%v), want a string message", r, r)
+				}
+				if !strings.Contains(msg, tt.wantName) ||
+					!strings.Contains(msg, "already registered with different label dimensions") {
+					t.Errorf("panic message %q must name the metric and explain the label-dimension mismatch", msg)
+				}
+			}()
+
+			tt.then(p)
+		})
 	}
 }
 
