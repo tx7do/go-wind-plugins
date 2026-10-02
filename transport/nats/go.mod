@@ -12,9 +12,10 @@ replace (
 
 require (
 	github.com/stretchr/testify v1.11.1
-	github.com/tx7do/go-wind v0.0.1
+	github.com/tx7do/go-wind v0.0.3
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/broker/nats v0.0.1
+	github.com/tx7do/go-wind-plugins/metrics v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v0.0.1
 	github.com/tx7do/go-wind-plugins/transport v0.0.1
 	go.opentelemetry.io/otel v1.43.0
@@ -37,7 +38,7 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
+	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1 // indirect
 	// indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

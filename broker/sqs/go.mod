@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.26
 	github.com/stretchr/testify v1.11.1
-	github.com/tx7do/go-wind v0.0.1
+	github.com/tx7do/go-wind v0.0.3
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v0.0.1
 )
@@ -42,7 +42,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
+	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1 // indirect
 	// indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

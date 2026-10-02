@@ -12,14 +12,17 @@ require (
 	github.com/apache/pulsar-client-go v0.19.0
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
-	github.com/tx7do/go-wind v0.0.1
+	github.com/tx7do/go-wind v0.0.3
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v0.0.1
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 )
 
-require github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
+require (
+	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1
+	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
+)
 
 require (
 	github.com/AthenZ/athenz v1.12.42 // indirect
@@ -59,7 +62,6 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/theparanoids/crypki v1.21.0 // indirect
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

@@ -12,8 +12,9 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/stretchr/testify v1.11.1
-	github.com/tx7do/go-wind v0.0.1
+	github.com/tx7do/go-wind v0.0.3
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
+	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v0.0.1
 	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
 	go.opentelemetry.io/otel v1.43.0
@@ -31,7 +32,6 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect

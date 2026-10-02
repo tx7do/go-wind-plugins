@@ -11,8 +11,9 @@ replace (
 require (
 	github.com/nats-io/nats.go v1.51.0
 	github.com/stretchr/testify v1.11.1
-	github.com/tx7do/go-wind v0.0.1
+	github.com/tx7do/go-wind v0.0.3
 	github.com/tx7do/go-wind-plugins/broker v0.0.1
+	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding/proto v0.0.1
 	github.com/tx7do/go-wind-plugins/testing v0.0.1
 	github.com/tx7do/go-wind-plugins/tracer/otlp v0.0.1
@@ -34,7 +35,6 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1 // indirect
-	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0 // indirect
