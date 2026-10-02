@@ -80,7 +80,14 @@ func (s *Stream) run() {
 
 			case event := <-stream.event:
 				if stream.autoReplay {
-					stream.eventLog.Add(event)
+					// EventLog.Add 会改写事件的 ID 与时间戳；直接把派发事件
+					// 交给它会把时间戳刷新为当前时间，导致 ServeHTTP 的
+					// eventTTL 检查永远看不到过期事件。日志用副本打戳，
+					// 派发事件保持发布时的时间戳，仅同步日志分配的 ID
+					// （供客户端携带 Last-Event-ID 重连续传）。
+					journal := *event
+					stream.eventLog.Add(&journal)
+					event.ID = journal.ID
 				}
 				for i := range stream.subscribers {
 					stream.subscribers[i].connection <- event
@@ -156,10 +163,17 @@ func (s *Stream) removeSubscriber(i int) {
 
 func (s *Stream) removeAllSubscribers() {
 	for i := 0; i < len(s.subscribers); i++ {
-		close(s.subscribers[i].connection)
-		if s.subscribers[i].removed != nil {
-			s.subscribers[i].removed <- struct{}{}
-			close(s.subscribers[i].removed)
+		sub := s.subscribers[i]
+		close(sub.connection)
+		if sub.removed != nil {
+			sub.removed <- struct{}{}
+			close(sub.removed)
+		}
+		// 流级关闭（StreamManager.Remove/RemoveWithID/Clean）同样要触发
+		// onUnsubscribe：与显式退订路径互斥（订阅者只会被其中一处移除），
+		// 每个订阅者恰好触发一次。
+		if s.onUnsubscribe != nil {
+			go s.onUnsubscribe(s.id, sub)
 		}
 	}
 	atomic.StoreInt32(&s.subscriberCount, 0)

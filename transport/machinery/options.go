@@ -2,6 +2,7 @@ package machinery
 
 import (
 	"crypto/tls"
+	"fmt"
 	"time"
 
 	"github.com/RichardKnop/machinery/v2/config"
@@ -68,6 +69,11 @@ func WithYamlConfig(cnfPath string, keepReloading bool) ServerOption {
 		cnf, err := config.NewFromYaml(cnfPath, keepReloading)
 		if err != nil {
 			LogErrorf("load yaml config [%s] failed: %s", cnfPath, err.Error())
+			// 把加载错误记录到服务器的错误状态，由 Start 返回；
+			// 不能把 nil cfg 赋给 s.cfg，否则 NewServer 会在
+			// createMachineryServer 里发生空指针 panic。
+			s.err = fmt.Errorf("load yaml config [%s]: %w", cnfPath, err)
+			return
 		}
 		s.cfg = cnf
 	}

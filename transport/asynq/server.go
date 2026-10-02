@@ -159,15 +159,20 @@ func (s *Server) applyRedisOptions() {
 	case *asynq.RedisClientOpt:
 		s.updateRedisClientOpt(v)
 	case asynq.RedisClientOpt:
+		// 值类型分支必须把修改后的结构体写回，否则所有覆盖
+		// （WithRedisPassword 等）都会丢失在临时副本上
 		s.updateRedisClientOpt(&v)
+		s.redisConnOpt = v
 	case *asynq.RedisClusterClientOpt:
 		s.updateRedisClusterClientOpt(v)
 	case asynq.RedisClusterClientOpt:
 		s.updateRedisClusterClientOpt(&v)
+		s.redisConnOpt = v
 	case *asynq.RedisFailoverClientOpt:
 		s.updateRedisFailoverClientOpt(v)
 	case asynq.RedisFailoverClientOpt:
 		s.updateRedisFailoverClientOpt(&v)
+		s.redisConnOpt = v
 	}
 }
 

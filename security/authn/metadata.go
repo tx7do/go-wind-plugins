@@ -12,8 +12,8 @@ import (
 // MDWithAuth injects the token string into the outgoing gRPC metadata of the
 // context, formatted as "<expectedScheme> <tokenStr>".
 func MDWithAuth(ctx context.Context, expectedScheme string, tokenStr string) context.Context {
-	metautils.ExtractOutgoing(ctx).Set(HeaderAuthorize, formatToken(expectedScheme, tokenStr))
-	return ctx
+	md := metautils.ExtractOutgoing(ctx).Set(HeaderAuthorize, formatToken(expectedScheme, tokenStr))
+	return md.ToOutgoing(ctx)
 }
 
 // AuthFromMD extracts and validates the bearer token from the incoming gRPC

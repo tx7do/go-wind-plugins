@@ -67,7 +67,8 @@ func (e *API) cacheAllInstances() map[string][]Instance {
 	items := make(map[string][]Instance)
 	instances := e.cli.FetchAllUpInstances(context.Background())
 	for _, instance := range instances {
-		items[e.ToAppID(instance.App)] = append(items[instance.App], instance)
+		appID := e.ToAppID(instance.App)
+		items[appID] = append(items[appID], instance)
 	}
 
 	return items
@@ -118,7 +119,12 @@ func (e *API) Subscribe(serverName string, fn func()) error {
 
 func (e *API) GetService(ctx context.Context, serverName string) []Instance {
 	appID := e.ToAppID(serverName)
-	if ins, ok := e.allInstances[appID]; ok {
+	// allInstances is written under the lock by broadcast; the read must be
+	// guarded too, otherwise it races with a concurrent refresh.
+	e.lock.Lock()
+	ins, ok := e.allInstances[appID]
+	e.lock.Unlock()
+	if ok {
 		return ins
 	}
 

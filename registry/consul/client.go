@@ -198,6 +198,13 @@ func (c *Client) Register(_ context.Context, svc *wind.Instance, enableHealthChe
 	if c.heartbeat {
 		go func() {
 			time.Sleep(time.Second)
+			// cancel 之后不得再上报心跳：先确认 ctx 仍然存活。
+			select {
+			case <-c.ctx.Done():
+				_ = c.cli.Agent().ServiceDeregister(svc.ID)
+				return
+			default:
+			}
 			err = c.cli.Agent().UpdateTTL("service:"+svc.ID, "pass", "pass")
 			if err != nil {
 				log.Printf("[Consul] update ttl heartbeat to consul failed! err=%v", err)
@@ -226,6 +233,14 @@ func (c *Client) Register(_ context.Context, svc *wind.Instance, enableHealthChe
 						log.Printf("[Consul] update ttl heartbeat to consul failed! err=%v", err)
 						// when the previous report fails, try to re register the service
 						time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
+						// 取消之后严禁复活实例：重注册前必须再次确认 ctx 存活，
+						// 否则失败的 TTL 上报会让已注销的服务被重新注册。
+						select {
+						case <-c.ctx.Done():
+							_ = c.cli.Agent().ServiceDeregister(svc.ID)
+							return
+						default:
+						}
 						if err := c.cli.Agent().ServiceRegister(asr); err != nil {
 							log.Printf("[Consul] re registry service failed! err=%v", err)
 						} else {

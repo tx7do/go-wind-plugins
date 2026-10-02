@@ -85,6 +85,12 @@ func (r *Registry) Endpoints(service *wind.Instance) []Endpoint {
 	for _, ep := range service.Endpoints {
 		start := strings.Index(ep, "//")
 		end := strings.LastIndex(ep, ":")
+		// Skip endpoints that do not have the scheme://host:port shape:
+		// a portless endpoint like http://host would make start+2 > end
+		// and the slice below would panic.
+		if start < 0 || end <= start+2 {
+			continue
+		}
 		appID := strings.ToUpper(service.Name)
 		ip := ep[start+2 : end]
 		sport := ep[end+1:]

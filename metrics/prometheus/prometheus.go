@@ -30,9 +30,10 @@ var _ metrics.Metrics = (*Provider)(nil)
 type Option func(*config)
 
 type config struct {
-	namespace string
-	subsystem string
-	registry  prometheus.Registerer
+	namespace   string
+	subsystem   string
+	registry    prometheus.Registerer
+	registrySet bool
 }
 
 func defaultConfig() *config {
@@ -52,8 +53,12 @@ func WithSubsystem(sub string) Option {
 }
 
 // WithRegistry sets a custom Prometheus registerer (useful for testing).
+// Both New and NewWithDefaultRegistry honour an explicitly-set registerer.
 func WithRegistry(r prometheus.Registerer) Option {
-	return func(c *config) { c.registry = r }
+	return func(c *config) {
+		c.registry = r
+		c.registrySet = true
+	}
 }
 
 // Provider implements [metrics.Metrics] using the Prometheus client library.
@@ -71,19 +76,22 @@ type Provider struct {
 	labelNames    map[string][]string
 }
 
-// New creates a Prometheus-backed metrics provider.
+// New creates a Prometheus-backed metrics provider. Unless a registry is
+// supplied via WithRegistry, it installs its own fresh registry so metrics
+// never leak into prometheus.DefaultRegisterer.
 func New(opts ...Option) (*Provider, error) {
 	cfg := defaultConfig()
 	for _, opt := range opts {
 		opt(cfg)
 	}
 
-	reg := prometheus.NewRegistry()
-	cfg.registry = reg
+	if !cfg.registrySet {
+		cfg.registry = prometheus.NewRegistry()
+	}
 
 	return &Provider{
 		cfg:           cfg,
-		factory:       promauto.With(reg),
+		factory:       promauto.With(cfg.registry),
 		counters:      make(map[string]prometheus.Counter),
 		counterVecs:   make(map[string]*prometheus.CounterVec),
 		histograms:    make(map[string]prometheus.Histogram),

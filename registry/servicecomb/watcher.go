@@ -14,17 +14,26 @@ var _ baseRegistry.Watcher = (*Watcher)(nil)
 type Watcher struct {
 	cli RegistryClient
 	ch  chan *wind.Instance
+
+	// ctx is canceled by Stop; it makes Put a no-op after Stop (so the SDK
+	// callback can never send on a channel nobody reads) and lets Next
+	// respect both its own ctx and the watcher's lifecycle.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func newWatcher(_ context.Context, cli RegistryClient, serviceName string) (*Watcher, error) {
+func newWatcher(ctx context.Context, cli RegistryClient, serviceName string) (*Watcher, error) {
 	// 构建当前服务与目标服务之间的依赖关系，完成discovery
 	_, err := cli.FindMicroServiceInstances(curServiceID, appID, serviceName, "")
 	if err != nil {
 		return nil, err
 	}
+	wctx, wcancel := context.WithCancel(ctx)
 	w := &Watcher{
-		cli: cli,
-		ch:  make(chan *wind.Instance),
+		cli:    cli,
+		ch:     make(chan *wind.Instance),
+		ctx:    wctx,
+		cancel: wcancel,
 	}
 	go func() {
 		watchErr := w.cli.WatchMicroService(curServiceID, func(event *sc.MicroServiceInstanceChangedEvent) {
@@ -47,19 +56,32 @@ func newWatcher(_ context.Context, cli RegistryClient, serviceName string) (*Wat
 	return w, nil
 }
 
-// Put only for UT
+// Put delivers an event to Next. It is a no-op once the watcher is stopped,
+// so a late SDK callback can no longer panic on a closed channel.
 func (w *Watcher) Put(svcIns *wind.Instance) {
-	w.ch <- svcIns
+	select {
+	case <-w.ctx.Done():
+		return
+	default:
+	}
+	select {
+	case w.ch <- svcIns:
+	case <-w.ctx.Done():
+	}
 }
 
 func (w *Watcher) Next(ctx context.Context) ([]*wind.Instance, error) {
-	var svcInstances []*wind.Instance
-	svcIns := <-w.ch
-	svcInstances = append(svcInstances, svcIns)
-	return svcInstances, nil
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-w.ctx.Done():
+		return nil, w.ctx.Err()
+	case svcIns := <-w.ch:
+		return []*wind.Instance{svcIns}, nil
+	}
 }
 
 func (w *Watcher) Stop() error {
-	close(w.ch)
+	w.cancel()
 	return nil
 }

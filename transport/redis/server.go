@@ -32,8 +32,11 @@ type Server struct {
 }
 
 func NewServer(opts ...ServerOption) *Server {
-	opts = append(opts, WithReadTimeout(24*time.Hour))
-	opts = append(opts, WithIdleTimeout(24*time.Hour))
+	// 默认读/空闲超时放在用户选项之前，保证用户的显式配置可以覆盖默认值。
+	opts = append([]ServerOption{
+		WithReadTimeout(24 * time.Hour),
+		WithIdleTimeout(24 * time.Hour),
+	}, opts...)
 
 	srv := &Server{
 		baseCtx:        context.Background(),

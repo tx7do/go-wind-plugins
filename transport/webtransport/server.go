@@ -122,6 +122,10 @@ func (s *Server) BroadcastRawData(data []byte) error {
 // 使用类型别名使得 transport/http/middleware 下的中间件可以直接复用。
 type Middleware = func(http.Handler) http.Handler
 
+// defaultHandlerPath 是未通过 WithPath 配置时的默认处理器路径，
+// 与本模块示例和测试中统一使用的路径保持一致。
+const defaultHandlerPath = "/webtransport"
+
 func NewServer(opts ...ServerOption) *Server {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	srv := &Server{
@@ -161,6 +165,10 @@ func (s *Server) init(opts ...ServerOption) {
 	}
 	s.Server.AdditionalSettings[settingsEnableWebtransport] = 1
 
+	// 空路径会让 mux.HandleFunc("") 以非法 pattern panic，回退到默认路径
+	if s.path == "" {
+		s.path = defaultHandlerPath
+	}
 	s.mux.HandleFunc(s.path, s.addHandler)
 
 	// 应用中间件链

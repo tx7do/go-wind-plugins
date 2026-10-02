@@ -246,8 +246,11 @@ func (e *Client) registerEndpoint(ctx context.Context, ep Endpoint) error {
 }
 
 func (e *Client) Heartbeat(ep Endpoint) {
+	// The channel is buffered (capacity 1) so cancelHeartbeat can signal a
+	// heartbeat loop that has already moved on, without ever blocking.
+	ch := make(chan struct{}, 1)
 	e.lock.Lock()
-	e.keepalive[ep.AppID] = make(chan struct{})
+	e.keepalive[ep.AppID] = ch
 	e.lock.Unlock()
 
 	ticker := time.NewTicker(e.heartbeatInterval)
@@ -257,7 +260,7 @@ func (e *Client) Heartbeat(ep Endpoint) {
 		select {
 		case <-e.ctx.Done():
 			return
-		case <-e.keepalive[ep.AppID]:
+		case <-ch:
 			return
 		case <-ticker.C:
 			if err := e.do(e.ctx, http.MethodPut, []string{"apps", ep.AppID, ep.InstanceID}, nil, nil); err != nil {
@@ -273,8 +276,15 @@ func (e *Client) Heartbeat(ep Endpoint) {
 func (e *Client) cancelHeartbeat(appID string) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	if ch, ok := e.keepalive[appID]; ok {
-		ch <- struct{}{}
+	ch, ok := e.keepalive[appID]
+	if !ok {
+		return
+	}
+	// Non-blocking send: the heartbeat goroutine may already have exited
+	// (ctx canceled), and an unbuffered send would block forever.
+	select {
+	case ch <- struct{}{}:
+	default:
 	}
 }
 

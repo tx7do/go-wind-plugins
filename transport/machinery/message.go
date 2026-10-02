@@ -18,7 +18,7 @@ func NewMessageCarrier(msg *tasks.Headers) MessageCarrier {
 
 func (c MessageCarrier) Get(key string) string {
 	if c.msg == nil {
-		*c.msg = make(tasks.Headers)
+		return ""
 	}
 
 	value := (*c.msg)[key]
@@ -75,6 +75,9 @@ func (c MessageCarrier) Get(key string) string {
 
 func (c MessageCarrier) Set(key, val string) {
 	if c.msg == nil {
+		return
+	}
+	if *c.msg == nil {
 		*c.msg = make(tasks.Headers)
 	}
 	(*c.msg)[key] = val
@@ -82,7 +85,7 @@ func (c MessageCarrier) Set(key, val string) {
 
 func (c MessageCarrier) Keys() []string {
 	if c.msg == nil {
-		*c.msg = make(tasks.Headers)
+		return nil
 	}
 	var keys []string
 	_ = c.msg.ForeachKey(func(key, _ string) error {

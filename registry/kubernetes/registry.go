@@ -90,8 +90,16 @@ type Registry struct {
 	stopCh chan struct{}
 }
 
-// New is used to initialize the Registry
+// New is used to initialize the Registry.
+//
+// It panics if clientSet is nil: the signature cannot return an error, and a
+// nil client would otherwise surface much later as an unrecoverable nil
+// pointer dereference deep inside the informer goroutines (or in Register).
+// Pass a real *kubernetes.Clientset, e.g. from kubernetes.NewForConfig.
 func New(clientSet *kubernetes.Clientset, namespace string) *Registry {
+	if clientSet == nil {
+		panic("wind/kubernetes: clientSet must not be nil")
+	}
 	if strings.EqualFold(namespace, "") {
 		namespace = metav1.NamespaceAll
 	}

@@ -54,6 +54,12 @@ func (s *Server) init(opts ...ServerOption) {
 
 	s.Broker = rocketmq.NewBroker(s.driverType, s.brokerOpts...)
 
+	// NewServer 的签名只返回 *Server，无法向上返回错误；
+	// 未知 DriverType 会得到 nil broker，把错误存入粘性错误字段，
+	// 由 Start 统一返回，避免调用方 panic。
+	if s.Broker == nil {
+		s.err = fmt.Errorf("rocketmq broker is nil: unknown driver type %q", string(s.driverType))
+	}
 }
 
 func (s *Server) Name() string {
@@ -69,7 +75,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
-
 	if s.err = s.Init(); s.err != nil {
 		LogErrorf("init broker failed: [%s]", s.err.Error())
 		return s.err
@@ -84,7 +89,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// 先置位再注册订阅：与 Stop 的交接由 doRegisterSubscriber 的 started 复查处理。
 	s.started.Store(true)
-
 
 	if s.err = s.doRegisterSubscriberMap(); s.err != nil {
 		return s.err
@@ -121,7 +125,6 @@ func (s *Server) Stop(ctx context.Context) error {
 
 	err := s.Disconnect()
 	s.err = nil
-
 
 	LogInfo("server stopped.")
 

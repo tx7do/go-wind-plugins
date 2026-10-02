@@ -28,6 +28,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
+	gqltransport "github.com/99designs/gqlgen/graphql/handler/transport"
 
 	"github.com/tx7do/go-wind/transport"
 )
@@ -70,7 +71,15 @@ func NewServer(addr string, opts ...Option) *Server {
 
 // Handle 注册一个 GraphQL schema 到指定路径。
 func (s *Server) Handle(path string, es graphql.ExecutableSchema) {
-	s.mux.Handle(path, handler.New(es))
+	h := handler.New(es)
+	// handler.New 本身不注册任何 HTTP 传输层，所有请求都会得到
+	// 400 "transport not supported"。挂上标准的传输层，使
+	// srv.Handle("/query", schema) 的用法开箱即用。
+	h.AddTransport(gqltransport.Options{})
+	h.AddTransport(gqltransport.GET{})
+	h.AddTransport(gqltransport.POST{})
+	h.AddTransport(gqltransport.MultipartForm{})
+	s.mux.Handle(path, h)
 }
 
 // HandleFunc 注册普通 HTTP 处理器（如 /playground 等辅助页面）。

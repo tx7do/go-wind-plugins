@@ -465,12 +465,16 @@ func (s *Server) defaultUnmarshalNetPacket(buf []byte) (*MessageHandlerData, Mes
 }
 
 func (s *Server) defaultHandleSocketRawData(sessionId SessionID, buf []byte) error {
-	_, payload, err := s.defaultUnmarshalNetPacket(buf)
+	// 优先使用配置的自定义反序列化器（与 webrtc 传输一致），否则回退默认实现。
+	unmarshal := s.defaultUnmarshalNetPacket
+	if s.netPacketUnmarshaler != nil {
+		unmarshal = s.netPacketUnmarshaler
+	}
+
+	handler, payload, err := unmarshal(buf)
 	if err != nil {
 		return err
 	}
-
-	handler := s.GetMessageHandler(extractMessageType(buf, s.payloadType))
 	if handler == nil {
 		return errors.New("message handler not found")
 	}

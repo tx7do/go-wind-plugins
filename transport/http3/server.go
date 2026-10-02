@@ -77,6 +77,12 @@ func (s *Server) init(opts ...ServerOption) {
 	s.router.MethodNotAllowedHandler = http.NotFoundHandler()
 
 	// 应用中间件链：先应用标准 HTTP 中间件，再应用 FilterFunc
+	s.buildHandler()
+}
+
+// buildHandler 组装处理器链：先应用标准 HTTP 中间件，再应用 FilterFunc。
+// init 与 Use 都会调用它，保证构造后追加的中间件同样生效。
+func (s *Server) buildHandler() {
 	h := http.Handler(s.router)
 	for i := len(s.middlewares) - 1; i >= 0; i-- {
 		h = s.middlewares[i](h)
@@ -164,6 +170,9 @@ func (s *Server) HandleHeader(key, val string, h http.HandlerFunc) {
 // 必须在 Start 之前调用。
 func (s *Server) Use(middlewares ...Middleware) {
 	s.middlewares = append(s.middlewares, middlewares...)
+	// 重建处理器链，使构造后的 Use() 立即生效
+	// （此前仅在 init 中组装一次，Use() 是静默无操作）。
+	s.buildHandler()
 }
 
 func (s *Server) ServeHTTP(res http.ResponseWriter, req *http.Request) {

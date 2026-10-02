@@ -20,7 +20,7 @@ func WithStoreId(storeId string) ClientOption {
 
 func WithToken(token string) ClientOption {
 	return func(c *Client) {
-		if token != "" {
+		if token == "" {
 			return
 		}
 

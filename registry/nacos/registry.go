@@ -100,7 +100,7 @@ func (r *Registry) Register(_ context.Context, si *wind.Instance) error {
 			GroupName:   r.opts.group,
 		})
 		if e != nil {
-			return fmt.Errorf("RegisterInstance err %v,%v", e, endpoint)
+			return fmt.Errorf("RegisterInstance err %w,%v", e, endpoint)
 		}
 	}
 	return nil

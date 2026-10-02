@@ -65,14 +65,31 @@ func (c *Client) init(opts ...ClientOption) {
 	c.endpoint, _ = url.Parse(addr)
 }
 
+// dialAddress resolves a dialable host:port from the configured endpoint.
+// Accepted forms are a bare host:port (IPv4 or bracketed IPv6), and URLs
+// such as scheme://host:port. The parsed URL is used only when it carries a
+// Host; every other form is treated as host:port.
+func (c *Client) dialAddress() string {
+	if c.endpoint != nil && c.endpoint.Host != "" {
+		return c.endpoint.Host
+	}
+
+	if host, port, err := net.SplitHostPort(c.url); err == nil {
+		return net.JoinHostPort(host, port)
+	}
+
+	return c.url
+}
+
 func (c *Client) Connect() error {
-	if c.endpoint == nil {
+	addr := c.dialAddress()
+	if addr == "" {
 		return errors.New("endpoint is nil")
 	}
 
-	LogInfof("connecting to %s", c.endpoint.String())
+	LogInfof("connecting to %s", addr)
 
-	conn, err := net.Dial("tcp", c.endpoint.String())
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		LogErrorf("cant connect to server: %s", err.Error())
 		return err

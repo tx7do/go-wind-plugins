@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-chassis/cari/discovery"
@@ -57,11 +58,15 @@ type RegistryClient interface {
 // Registry is servicecomb registry.
 type Registry struct {
 	cli RegistryClient
+
+	mu    sync.Mutex
+	stops map[string]chan struct{} // instance ID → heartbeat stop signal
 }
 
 func New(client RegistryClient) *Registry {
 	r := &Registry{
-		cli: client,
+		cli:   client,
+		stops: make(map[string]chan struct{}),
 	}
 	return r
 }
@@ -148,22 +153,47 @@ func (r *Registry) Register(_ context.Context, svcIns *wind.Instance) error {
 	if err != nil {
 		return err
 	}
+	r.startHeartbeat(sid, svcIns.ID)
+	return nil
+}
+
+// startHeartbeat launches the periodic 30s heartbeat loop for one instance.
+// The loop exits when Deregister closes the instance's stop signal; without
+// it, every Register call leaked an unstoppable goroutine.
+func (r *Registry) startHeartbeat(sid, instanceID string) {
+	stop := make(chan struct{})
+	r.mu.Lock()
+	if old, ok := r.stops[instanceID]; ok {
+		close(old)
+	}
+	r.stops[instanceID] = stop
+	r.mu.Unlock()
+
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
-			<-ticker.C
-			_, err = r.cli.Heartbeat(sid, svcIns.ID)
-			if err != nil {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+			if _, err := r.cli.Heartbeat(sid, instanceID); err != nil {
 				log.Printf("failed to send heartbeat: %v", err)
-				continue
 			}
 		}
 	}()
-	return nil
 }
 
 func (r *Registry) Deregister(_ context.Context, svcIns *wind.Instance) error {
+	// 先停掉该实例的心跳循环，再注销实例。
+	r.mu.Lock()
+	if stop, ok := r.stops[svcIns.ID]; ok {
+		close(stop)
+		delete(r.stops, svcIns.ID)
+	}
+	r.mu.Unlock()
+
 	sid, err := r.cli.GetMicroServiceID(appID, svcIns.Name, svcIns.Version, env)
 	if err != nil {
 		return err
