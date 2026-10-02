@@ -26,6 +26,8 @@ func WithAddress(addrs []string) ServerOption {
 	}
 }
 
+// WithTLSConfig TLS配置：透传给 broker 驱动并作用于 AMQP 连接
+// （conf.TLSClientConfig），Secure=true 走 amqps/TLS 拨号。
 func WithTLSConfig(c *tls.Config) ServerOption {
 	return func(s *Server) {
 		if c != nil {

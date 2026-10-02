@@ -19,6 +19,10 @@ type WorkflowWorker struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	running bool
+	// started records whether the underlying go-workflows worker was ever
+	// started successfully. Its completion signals only exist after Start,
+	// so waiting on a never-started worker would block forever.
+	started bool
 }
 
 // NewWorker creates a new WorkflowWorker that processes both workflows and activities.
@@ -120,6 +124,10 @@ func (ww *WorkflowWorker) Start(ctx context.Context) error {
 		return fmt.Errorf("start worker error: %w", err)
 	}
 
+	ww.mu.Lock()
+	ww.started = true
+	ww.mu.Unlock()
+
 	return nil
 }
 
@@ -138,7 +146,19 @@ func (ww *WorkflowWorker) Stop() {
 
 // WaitForCompletion waits for all active tasks to complete.
 // Should be called after Stop() to gracefully drain in-flight work.
+//
+// It returns an error immediately when the worker was never started: the
+// underlying go-workflows worker only completes after Start, so waiting on a
+// fresh (or failed-to-start) worker would block forever.
 func (ww *WorkflowWorker) WaitForCompletion() error {
+	ww.mu.RLock()
+	started := ww.started
+	ww.mu.RUnlock()
+
+	if !started {
+		return fmt.Errorf("worker was never started: WaitForCompletion would block forever")
+	}
+
 	return ww.worker.WaitForCompletion()
 }
 

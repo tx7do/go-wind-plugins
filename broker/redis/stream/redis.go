@@ -62,6 +62,11 @@ func (b *streamBroker) Address() string {
 
 func (b *streamBroker) Init(opts ...broker.Option) error {
 	if b.pool != nil {
+		// Connect 先于 Init 是公开 API 的合法顺序（如先 srv.Connect() 再 srv.Start()），
+		// 此时无新选项的 Init 幂等成功；带新选项的 Init 会改写活跃连接池感知不到的配置，仍然拒绝。
+		if len(opts) == 0 {
+			return nil
+		}
 		return errors.New("redis-stream: cannot init while connected")
 	}
 
@@ -89,6 +94,12 @@ func normalizeAddr(addressList []string) string {
 	return addr
 }
 
+// enableTLSScheme 把 redis:// scheme 改写为 rediss://，使 DialURL 以 TLS 拨号。
+// 已经是 rediss:// 的地址原样返回。
+func enableTLSScheme(addr string) string {
+	return strings.Replace(addr, "redis://", "rediss://", 1)
+}
+
 func (b *streamBroker) Connect() error {
 	if b.pool != nil {
 		return nil
@@ -98,18 +109,28 @@ func (b *streamBroker) Connect() error {
 		b.addr = normalizeAddr(b.options.Addrs)
 	}
 
+	// TLS 透传：redigo 的 DialURL 只按 URL scheme（rediss://）决定是否启用 TLS
+	// （DialUseTLS 会被 DialURL 忽略），因此这里改写 scheme 而不是传 DialUseTLS。
+	addr := b.addr
+	if b.options.Secure || b.options.TLSConfig != nil {
+		addr = enableTLSScheme(addr)
+	}
+
 	b.pool = &redis.Pool{
 		MaxIdle:     b.commonOpts.MaxIdle,
 		MaxActive:   b.commonOpts.MaxActive,
 		IdleTimeout: b.commonOpts.IdleTimeout,
 		Dial: func() (redis.Conn, error) {
-			return redis.DialURL(
-				b.addr,
+			dialOpts := []redis.DialOption{
 				redis.DialConnectTimeout(b.commonOpts.ConnectTimeout),
-				redis.DialReadTimeout(redisOption.DefaultHealthCheckPeriod+b.commonOpts.ReadTimeout),
+				redis.DialReadTimeout(redisOption.DefaultHealthCheckPeriod + b.commonOpts.ReadTimeout),
 				redis.DialWriteTimeout(b.commonOpts.WriteTimeout),
 				redis.DialPassword(b.commonOpts.Password),
-			)
+			}
+			if b.options.TLSConfig != nil {
+				dialOpts = append(dialOpts, redis.DialTLSConfig(b.options.TLSConfig))
+			}
+			return redis.DialURL(addr, dialOpts...)
 		},
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			_, err := c.Do("PING")

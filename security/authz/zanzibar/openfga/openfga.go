@@ -3,6 +3,7 @@ package openfga
 import (
 	"context"
 	"encoding/json"
+	"sync"
 
 	"github.com/google/uuid"
 	windlog "github.com/tx7do/go-wind/log"
@@ -17,6 +18,12 @@ type Client struct {
 
 	apiUrl, storeId string
 	credentials     credentials.Credentials
+
+	// ensureOnce performs store discovery lazily, on the first API call, so
+	// that NewClient itself performs no network I/O. The outcome is remembered
+	// in ensureErr and surfaced by every subsequent call.
+	ensureOnce sync.Once
+	ensureErr  error
 }
 
 func NewClient(opts ...ClientOption) *Client {
@@ -34,17 +41,30 @@ func (c *Client) init(opts ...ClientOption) {
 		o(c)
 	}
 
-	if c.createApiClient() != nil {
-		return
-	}
+	// Store discovery is intentionally NOT performed here: it needs a live
+	// ListStores round-trip, which would make the constructor dial the
+	// network. It runs lazily via ensureStoreOnce on the first API call.
+	_ = c.createApiClient()
+}
 
-	if c.ensureStore(context.Background()) != nil {
-		return
-	}
+// ensureStoreOnce runs store discovery at most once, just before the first
+// real API call, and remembers its result. A failed discovery is reported by
+// that call (and subsequent ones) instead of being silently swallowed.
+func (c *Client) ensureStoreOnce() error {
+	c.ensureOnce.Do(func() {
+		if c.fgaClient == nil {
+			// createApiClient already failed during init; surface that
+			// failure here instead of panicking on a nil client later.
+			c.ensureErr = c.createApiClient()
+			return
+		}
+		c.ensureErr = c.ensureStore(context.Background())
+	})
+	return c.ensureErr
 }
 
 func (c *Client) ensureStore(ctx context.Context) error {
-	stores, err := c.ListStore(context.Background())
+	stores, err := c.listStores(context.Background())
 	if err != nil {
 		return err
 	}
@@ -52,7 +72,7 @@ func (c *Client) ensureStore(ctx context.Context) error {
 	if stores == nil || len(*stores) == 0 {
 		_uuid := uuid.New()
 		storeName := _uuid.String()
-		err = c.CreateStore(ctx, storeName)
+		err = c.createStore(ctx, storeName)
 		if err != nil {
 			return err
 		}
@@ -81,6 +101,10 @@ func (c *Client) createApiClient() error {
 }
 
 func (c *Client) GetCheck(ctx context.Context, object, relation, subject string) (bool, error) {
+	if err := c.ensureStoreOnce(); err != nil {
+		return false, err
+	}
+
 	body := openfga.CheckRequest{
 		TupleKey: openfga.CheckRequestTupleKey{
 			User:     subject,
@@ -100,7 +124,16 @@ func (c *Client) GetCheck(ctx context.Context, object, relation, subject string)
 	return *data.Allowed, nil
 }
 
+// ListStore lists the stores on the server. As with every API call, store
+// discovery is ensured first (a no-op once a store id has been established).
 func (c *Client) ListStore(ctx context.Context) (*[]openfga.Store, error) {
+	if err := c.ensureStoreOnce(); err != nil {
+		return nil, err
+	}
+	return c.listStores(ctx)
+}
+
+func (c *Client) listStores(ctx context.Context) (*[]openfga.Store, error) {
 	stores, response, err := c.fgaClient.OpenFgaApi.ListStores(ctx).Execute()
 	if err != nil {
 		windlog.GetLogger().Error(ctx, "ListStore", "error", err, "response", response)
@@ -111,6 +144,10 @@ func (c *Client) ListStore(ctx context.Context) (*[]openfga.Store, error) {
 }
 
 func (c *Client) GetStore(ctx context.Context) string {
+	if err := c.ensureStoreOnce(); err != nil {
+		return ""
+	}
+
 	store, response, err := c.fgaClient.OpenFgaApi.GetStore(ctx, c.storeId).Execute()
 	if err != nil {
 		windlog.GetLogger().Error(ctx, "GetStore", "error", err, "response", response)
@@ -120,6 +157,13 @@ func (c *Client) GetStore(ctx context.Context) string {
 }
 
 func (c *Client) CreateStore(ctx context.Context, name string) error {
+	if err := c.ensureStoreOnce(); err != nil {
+		return err
+	}
+	return c.createStore(ctx, name)
+}
+
+func (c *Client) createStore(ctx context.Context, name string) error {
 	store, response, err := c.fgaClient.OpenFgaApi.CreateStore(ctx).
 		Body(openfga.CreateStoreRequest{
 			Name: name,
@@ -136,6 +180,10 @@ func (c *Client) CreateStore(ctx context.Context, name string) error {
 }
 
 func (c *Client) DeleteStore() error {
+	if err := c.ensureStoreOnce(); err != nil {
+		return err
+	}
+
 	body := openfga.ApiDeleteStoreRequest{}
 	response, err := c.fgaClient.OpenFgaApi.DeleteStoreExecute(body)
 	if err != nil {
@@ -150,6 +198,10 @@ func (c *Client) SetStoreId(id string) error {
 }
 
 func (c *Client) CreateRelationTuple(ctx context.Context, object, relation, subject string) error {
+	if err := c.ensureStoreOnce(); err != nil {
+		return err
+	}
+
 	body := openfga.WriteRequest{
 		Writes: &openfga.WriteRequestWrites{
 			TupleKeys: []openfga.TupleKey{
@@ -173,6 +225,10 @@ func (c *Client) CreateRelationTuple(ctx context.Context, object, relation, subj
 }
 
 func (c *Client) DeleteRelationTuple(ctx context.Context, object, relation, subject string) error {
+	if err := c.ensureStoreOnce(); err != nil {
+		return err
+	}
+
 	body := openfga.WriteRequest{
 		Deletes: &openfga.WriteRequestDeletes{
 			TupleKeys: []openfga.TupleKeyWithoutCondition{
@@ -196,6 +252,10 @@ func (c *Client) DeleteRelationTuple(ctx context.Context, object, relation, subj
 }
 
 func (c *Client) ExpandRelationTuple(ctx context.Context, object, relation string) error {
+	if err := c.ensureStoreOnce(); err != nil {
+		return err
+	}
+
 	body := openfga.ExpandRequest{
 		TupleKey: openfga.ExpandRequestTupleKey{
 			Relation: relation,
@@ -214,6 +274,10 @@ func (c *Client) ExpandRelationTuple(ctx context.Context, object, relation strin
 }
 
 func (c *Client) CreateAuthorizationModel(ctx context.Context, writeAuthorizationModelRequestString string) (string, error) {
+	if err := c.ensureStoreOnce(); err != nil {
+		return "", err
+	}
+
 	var body openfga.WriteAuthorizationModelRequest
 	if err := json.Unmarshal([]byte(writeAuthorizationModelRequestString), &body); err != nil {
 		return "", err

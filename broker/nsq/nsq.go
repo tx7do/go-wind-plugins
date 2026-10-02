@@ -98,6 +98,16 @@ func (b *nsqBroker) Init(opts ...broker.Option) error {
 }
 
 func (b *nsqBroker) configure(ctx context.Context) {
+	// TLS 透传：把 broker 选项映射到 go-nsq 客户端配置。
+	// go-nsq 以 TlsV1 作为 TLS 协商开关（IDENTIFY 中的 tls_v1），
+	// TlsConfig 为具体配置；仅设置 TlsConfig 而不开 TlsV1 不会触发 TLS。
+	if b.options.Secure {
+		b.config.TlsV1 = true
+	}
+	if b.options.TLSConfig != nil {
+		b.config.TlsConfig = b.options.TLSConfig
+	}
+
 	if v, ok := ctx.Value(lookupdAddrsKey{}).([]string); ok {
 		b.lookupAddrs = v
 	}

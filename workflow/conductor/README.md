@@ -167,7 +167,7 @@ wfExecutor := client.WorkflowExecutor()
 | Method | Description |
 |--------|-------------|
 | `NewClient(opts)` | Create a client connected to Conductor server |
-| `NewClientFromEnv()` | Create a client from environment variables |
+| `NewClientFromEnv(opts...)` | Create a client from environment variables; non-empty `ClientOptions` fields override the env values |
 | `StartWorkflow(ctx, opts)` | Start a workflow asynchronously, returns instance ID |
 | `StartWorkflowSync(ctx, opts, waitUntilTask)` | Start and block until a task completes |
 | `MonitorExecution(workflowID)` | Get a channel for async workflow result monitoring |

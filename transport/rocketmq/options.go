@@ -21,7 +21,10 @@ func WithBrokerOptions(opts ...broker.Option) ServerOption {
 	}
 }
 
-// WithTLSConfig 注意：对应 broker 驱动当前不消费 TLS 配置，透传不生效。
+// WithTLSConfig 注意：当前 rocketmq broker 驱动（aliyun HTTP SDK / v2 客户端 /
+// v5 客户端）均不消费该 TLS 配置，也不消费 Secure 标志——v5 SDK 虽有连接级
+// WithTLSConfig 选项，但其 client manager 创建 gRPC 连接时不透传任何选项，
+// 自定义 *tls.Config 无法送达。本选项仅为 API 兼容而保留。
 func WithTLSConfig(c *tls.Config) ServerOption {
 	return func(s *Server) {
 		if c != nil {

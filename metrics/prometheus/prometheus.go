@@ -17,6 +17,7 @@ package prometheus
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -158,16 +159,33 @@ func (p *Provider) cachedLabelKeys(name string, labels map[string]string) []stri
 	return keys
 }
 
+// mustCreate runs the given instrument factory for the named metric. promauto
+// panics with a bare "duplicate metrics collector registration attempted"
+// when the fully qualified metric name is already registered with different
+// label dimensions — e.g. recorded first without labels and later with labels
+// (or vice versa). That panic is recovered and re-raised with a message that
+// names the conflicting metric.
+func mustCreate[T any](name string, create func() T) (t T) {
+	defer func() {
+		if r := recover(); r != nil {
+			panic(fmt.Sprintf("prometheus: metric %q already registered with different label dimensions (%v)", name, r))
+		}
+	}()
+	return create()
+}
+
 // Counter implements [metrics.Metrics].
 func (p *Provider) Counter(ctx context.Context, name string, value float64, labels map[string]string) {
 	_ = ctx
 	if len(labels) == 0 {
 		c, ok := p.counters[name]
 		if !ok {
-			c = p.factory.NewCounter(prometheus.CounterOpts{
-				Namespace: p.cfg.namespace,
-				Subsystem: p.cfg.subsystem,
-				Name:      name,
+			c = mustCreate(name, func() prometheus.Counter {
+				return p.factory.NewCounter(prometheus.CounterOpts{
+					Namespace: p.cfg.namespace,
+					Subsystem: p.cfg.subsystem,
+					Name:      name,
+				})
 			})
 			p.counters[name] = c
 		}
@@ -178,11 +196,13 @@ func (p *Provider) Counter(ctx context.Context, name string, value float64, labe
 	keys := p.cachedLabelKeys(name, labels)
 	cv, ok := p.counterVecs[name]
 	if !ok {
-		cv = p.factory.NewCounterVec(prometheus.CounterOpts{
-			Namespace: p.cfg.namespace,
-			Subsystem: p.cfg.subsystem,
-			Name:      name,
-		}, keys)
+		cv = mustCreate(name, func() *prometheus.CounterVec {
+			return p.factory.NewCounterVec(prometheus.CounterOpts{
+				Namespace: p.cfg.namespace,
+				Subsystem: p.cfg.subsystem,
+				Name:      name,
+			}, keys)
+		})
 		p.counterVecs[name] = cv
 	}
 	cv.WithLabelValues(p.labelValues(labels, keys)...).Add(value)
@@ -194,10 +214,12 @@ func (p *Provider) Histogram(ctx context.Context, name string, value float64, la
 	if len(labels) == 0 {
 		h, ok := p.histograms[name]
 		if !ok {
-			h = p.factory.NewHistogram(prometheus.HistogramOpts{
-				Namespace: p.cfg.namespace,
-				Subsystem: p.cfg.subsystem,
-				Name:      name,
+			h = mustCreate(name, func() prometheus.Histogram {
+				return p.factory.NewHistogram(prometheus.HistogramOpts{
+					Namespace: p.cfg.namespace,
+					Subsystem: p.cfg.subsystem,
+					Name:      name,
+				})
 			})
 			p.histograms[name] = h
 		}
@@ -208,11 +230,13 @@ func (p *Provider) Histogram(ctx context.Context, name string, value float64, la
 	keys := p.cachedLabelKeys(name, labels)
 	hv, ok := p.histogramVecs[name]
 	if !ok {
-		hv = p.factory.NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: p.cfg.namespace,
-			Subsystem: p.cfg.subsystem,
-			Name:      name,
-		}, keys)
+		hv = mustCreate(name, func() *prometheus.HistogramVec {
+			return p.factory.NewHistogramVec(prometheus.HistogramOpts{
+				Namespace: p.cfg.namespace,
+				Subsystem: p.cfg.subsystem,
+				Name:      name,
+			}, keys)
+		})
 		p.histogramVecs[name] = hv
 	}
 	hv.WithLabelValues(p.labelValues(labels, keys)...).Observe(value)
@@ -224,10 +248,12 @@ func (p *Provider) Gauge(ctx context.Context, name string, value float64, labels
 	if len(labels) == 0 {
 		g, ok := p.gauges[name]
 		if !ok {
-			g = p.factory.NewGauge(prometheus.GaugeOpts{
-				Namespace: p.cfg.namespace,
-				Subsystem: p.cfg.subsystem,
-				Name:      name,
+			g = mustCreate(name, func() prometheus.Gauge {
+				return p.factory.NewGauge(prometheus.GaugeOpts{
+					Namespace: p.cfg.namespace,
+					Subsystem: p.cfg.subsystem,
+					Name:      name,
+				})
 			})
 			p.gauges[name] = g
 		}
@@ -238,11 +264,13 @@ func (p *Provider) Gauge(ctx context.Context, name string, value float64, labels
 	keys := p.cachedLabelKeys(name, labels)
 	gv, ok := p.gaugeVecs[name]
 	if !ok {
-		gv = p.factory.NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: p.cfg.namespace,
-			Subsystem: p.cfg.subsystem,
-			Name:      name,
-		}, keys)
+		gv = mustCreate(name, func() *prometheus.GaugeVec {
+			return p.factory.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: p.cfg.namespace,
+				Subsystem: p.cfg.subsystem,
+				Name:      name,
+			}, keys)
+		})
 		p.gaugeVecs[name] = gv
 	}
 	gv.WithLabelValues(p.labelValues(labels, keys)...).Set(value)

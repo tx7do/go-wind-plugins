@@ -25,8 +25,8 @@ func WithAddress(addr string) ServerOption {
 	}
 }
 
-// WithTLSConfig TLS配置
-// WithTLSConfig 注意：对应 broker 驱动当前不消费 TLS 配置，透传不生效。
+// WithTLSConfig TLS配置：透传给 broker 驱动并生效——连接池以 rediss:// 方案
+// 拨号并应用该配置（pubsub 与 stream 驱动均支持；nil 配置保持明文）。
 func WithTLSConfig(c *tls.Config) ServerOption {
 	return func(s *Server) {
 		if c != nil {

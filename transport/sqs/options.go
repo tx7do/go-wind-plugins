@@ -48,7 +48,9 @@ func WithCodec(c string) ServerOption {
 	}
 }
 
-// WithTLSConfig 注意：对应 broker 驱动当前不消费 TLS 配置，透传不生效。
+// WithTLSConfig TLS配置：透传给 broker 驱动并注入 AWS SDK 的 HTTP 客户端
+// transport（仅当提供非 nil 配置时生效）。仅置 Secure 而不给配置不改变行为：
+// AWS SDK 默认即使用 HTTPS 端点。
 func WithTLSConfig(c *tls.Config) ServerOption {
 	return func(s *Server) {
 		if c != nil {

@@ -70,7 +70,9 @@ func TestUnary_NonFailure_NotFound(t *testing.T) {
 
 	_, err := UnaryInterceptor(cb)(context.Background(), nil, info, handler)
 	require.Error(t, err)
-	assert.Equal(t, 1, cb.successN) // NotFound < Internal → success
+	// NotFound is a caller fault — not in the default failure table, so it
+	// counts as success.
+	assert.Equal(t, 1, cb.successN)
 	assert.Equal(t, 0, cb.failureN)
 }
 
@@ -145,4 +147,44 @@ func TestStream_Failure(t *testing.T) {
 	err := StreamInterceptor(cb)(nil, &fakeServerStream{ctx: context.Background()}, info, handler)
 	require.Error(t, err)
 	assert.Equal(t, 1, cb.failureN)
+}
+
+// TestUnary_FailureCodeTable drives the server interceptor with every gRPC
+// code and pins the default failure/success classification (see
+// defaultFailureCodes: Unknown, DeadlineExceeded, Internal, Unavailable and
+// DataLoss are server-side faults; everything else counts as success).
+func TestUnary_FailureCodeTable(t *testing.T) {
+	allCodes := []codes.Code{
+		codes.OK, codes.Canceled, codes.Unknown, codes.InvalidArgument,
+		codes.DeadlineExceeded, codes.NotFound, codes.AlreadyExists,
+		codes.PermissionDenied, codes.ResourceExhausted, codes.FailedPrecondition,
+		codes.Aborted, codes.OutOfRange, codes.Unimplemented, codes.Internal,
+		codes.Unavailable, codes.DataLoss, codes.Unauthenticated,
+	}
+	for _, code := range allCodes {
+		wantFailure := defaultFailureCodes[code]
+
+		t.Run(code.String(), func(t *testing.T) {
+			cb := &fakeBreaker{}
+			info := &grpc.UnaryServerInfo{FullMethod: "/pkg.Svc/Get"}
+			handler := func(_ context.Context, _ any) (any, error) {
+				return nil, status.Error(code, code.String())
+			}
+
+			_, err := UnaryInterceptor(cb)(context.Background(), nil, info, handler)
+			if code == codes.OK {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+
+			if wantFailure {
+				assert.Equal(t, 1, cb.failureN, "code %s must count as failure", code)
+				assert.Equal(t, 0, cb.successN)
+			} else {
+				assert.Equal(t, 1, cb.successN, "code %s must count as success", code)
+				assert.Equal(t, 0, cb.failureN)
+			}
+		})
+	}
 }

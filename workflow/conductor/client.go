@@ -3,6 +3,7 @@ package conductor
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/antihax/optional"
@@ -58,21 +59,33 @@ func NewClient(opts ClientOptions) (*WorkflowClient, error) {
 
 // NewClientFromEnv creates a WorkflowClient from environment variables:
 // CONDUCTOR_SERVER_URL, CONDUCTOR_AUTH_KEY, CONDUCTOR_AUTH_SECRET.
-func NewClientFromEnv() (*WorkflowClient, error) {
-	apiClient := client.NewAPIClientFromEnv()
-
-	workflowExecutor := executor.NewWorkflowExecutor(apiClient)
-	workflowClient := client.NewWorkflowClient(apiClient)
+//
+// Convention: the environment provides the defaults, and any non-empty field
+// in the given ClientOptions overrides the corresponding environment value.
+// Called without options it behaves as the pure environment-driven
+// constructor, and it routes through NewClient so the default-ServerURL
+// fallback applies when neither env nor options supply a URL.
+func NewClientFromEnv(opts ...ClientOptions) (*WorkflowClient, error) {
+	merged := ClientOptions{
+		ServerURL:  os.Getenv(settings.EnvServerURL),
+		AuthKey:    os.Getenv(settings.EnvAuthKey),
+		AuthSecret: os.Getenv(settings.EnvAuthSecret),
+	}
+	for _, o := range opts {
+		if o.ServerURL != "" {
+			merged.ServerURL = o.ServerURL
+		}
+		if o.AuthKey != "" {
+			merged.AuthKey = o.AuthKey
+		}
+		if o.AuthSecret != "" {
+			merged.AuthSecret = o.AuthSecret
+		}
+	}
 
 	LogInfo("connected to Conductor server from environment")
 
-	return &WorkflowClient{
-		apiClient:        apiClient,
-		workflowExecutor: workflowExecutor,
-		workflowClient:   workflowClient,
-		options:          ClientOptions{},
-		running:          true,
-	}, nil
+	return NewClient(merged)
 }
 
 // APIClient returns the underlying Conductor API client for advanced operations.

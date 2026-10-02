@@ -22,17 +22,6 @@ func UnaryClientInterceptor(cb circuitbreaker.CircuitBreaker, opts ...Option) gr
 		opt(cfg)
 	}
 
-	isFailure := func(err error) bool {
-		if err == nil {
-			return false
-		}
-		st, _ := status.FromError(err)
-		if cfg.failureCodes != nil {
-			return cfg.failureCodes[st.Code()]
-		}
-		return st.Code() >= codes.Internal
-	}
-
 	return func(
 		ctx context.Context,
 		method string,
@@ -50,7 +39,7 @@ func UnaryClientInterceptor(cb circuitbreaker.CircuitBreaker, opts ...Option) gr
 		}
 
 		err := invoker(ctx, method, req, reply, cc, callOpts...)
-		if isFailure(err) {
+		if cfg.isFailure(err) {
 			cb.MarkFailure()
 		} else {
 			cb.MarkSuccess()
@@ -70,17 +59,6 @@ func StreamClientInterceptor(cb circuitbreaker.CircuitBreaker, opts ...Option) g
 		opt(cfg)
 	}
 
-	isFailure := func(err error) bool {
-		if err == nil {
-			return false
-		}
-		st, _ := status.FromError(err)
-		if cfg.failureCodes != nil {
-			return cfg.failureCodes[st.Code()]
-		}
-		return st.Code() >= codes.Internal
-	}
-
 	return func(
 		ctx context.Context,
 		desc *grpc.StreamDesc,
@@ -98,7 +76,7 @@ func StreamClientInterceptor(cb circuitbreaker.CircuitBreaker, opts ...Option) g
 		}
 
 		stream, err := streamer(ctx, desc, cc, method, callOpts...)
-		if isFailure(err) {
+		if cfg.isFailure(err) {
 			cb.MarkFailure()
 		} else {
 			cb.MarkSuccess()

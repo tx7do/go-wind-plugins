@@ -2,11 +2,14 @@ package sqs
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -51,6 +54,14 @@ func NewBroker(opts ...broker.Option) broker.Broker {
 	}
 
 	return b
+}
+
+// newTLSHTTPClient 构造带自定义 *tls.Config 的 AWS SDK HTTP 客户端：
+// TLS 配置落在底层 http.Transport 的 TLSClientConfig 上。
+func newTLSHTTPClient(tlsCfg *tls.Config) aws.HTTPClient {
+	return awshttp.NewBuildableClient().WithTransportOptions(func(tr *http.Transport) {
+		tr.TLSClientConfig = tlsCfg.Clone()
+	})
 }
 
 func (b *sqsBroker) Name() string {
@@ -119,6 +130,12 @@ func (b *sqsBroker) Connect() error {
 			return aws.Endpoint{}, fmt.Errorf("unknown endpoint for service: %s, region: %s", service, region)
 		})
 		opts = append(opts, config.WithEndpointResolverWithOptions(customResolver))
+	}
+
+	// TLS 透传：把用户提供的 *tls.Config 装进 AWS SDK 的 HTTP 客户端 transport。
+	// 仅提供 Secure 而无 TLSConfig 时不做额外处理——AWS SDK 默认即使用 HTTPS 端点。
+	if b.options.TLSConfig != nil {
+		opts = append(opts, config.WithHTTPClient(newTLSHTTPClient(b.options.TLSConfig)))
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.Background(), opts...)

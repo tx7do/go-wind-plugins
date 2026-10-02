@@ -25,6 +25,9 @@ import (
 	httpPlugin "github.com/tx7do/go-wind-plugins/transport/http"
 )
 
+// 编译期确保 *chiDriver 实现 httpPlugin.Driver 接口。
+var _ httpPlugin.Driver = (*chiDriver)(nil)
+
 // chiDriver 基于 chi 路由框架实现的 HTTP 服务器驱动。
 type chiDriver struct {
 	router *chi.Mux
@@ -41,14 +44,12 @@ func (d *chiDriver) Handle(method, path string, handler http.HandlerFunc) {
 	d.router.MethodFunc(method, path, handler)
 }
 
-// HandlePrefix 在 prefix 下挂载前缀路由。
-// chi 的 Mount 会剥离挂载前缀，这里将原始路径还原后再交给 handler，
-// 以满足 Driver 契约：handler 收到未经 strip 的原始请求路径。
+// HandlePrefix 在 prefix 下挂载 handler，匹配 prefix 及其所有子路径。
+// chi 的 Mount 只修改路由上下文（RouteCtxKey）用于嵌套路由匹配，
+// 不会改写 r.URL.Path，因此挂载普通 http.Handler 时天然满足
+// Driver 契约：handler 收到未经 strip 的原始请求路径。
 func (d *chiDriver) HandlePrefix(prefix string, h http.Handler) {
-	d.router.Mount(prefix, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.URL.Path = prefix + r.URL.Path
-		h.ServeHTTP(w, r)
-	}))
+	d.router.Mount(prefix, h)
 }
 
 // Start 启动服务器并阻塞，直到 ctx 被取消时执行优雅关闭。

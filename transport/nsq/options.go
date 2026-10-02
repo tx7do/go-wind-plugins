@@ -29,7 +29,9 @@ func WithLookupdAddress(addrs []string) ServerOption {
 	}
 }
 
-// WithTLSConfig 注意：对应 broker 驱动当前不消费 TLS 配置，透传不生效。
+// WithTLSConfig TLS配置：透传给 broker 驱动并作用于 go-nsq 客户端——
+// Secure=true 开启 TLS 协商（IDENTIFY tls_v1），TLSConfig 作为具体 TLS 配置。
+// 要求 nsqd/nslookupd 端开启 TLS，否则协商回退明文。
 func WithTLSConfig(c *tls.Config) ServerOption {
 	return func(s *Server) {
 		if c != nil {
