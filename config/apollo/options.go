@@ -17,6 +17,16 @@ type options struct {
 	isBackupConfig bool
 	backupPath     string
 	originConfig   bool
+	mustStart      bool
+}
+
+// WithMustStart requires the first config sync to succeed. Without it a
+// startup failure is stored in the source and surfaced from Load/WatchValue
+// instead of panicking inside NewSource.
+func WithMustStart() Option {
+	return func(o *options) {
+		o.mustStart = true
+	}
 }
 
 // WithAppID with apollo config app id

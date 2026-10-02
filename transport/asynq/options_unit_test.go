@@ -82,13 +82,13 @@ func TestWithRedisType(t *testing.T) {
 	}, "unknown redis type must panic")
 }
 
-// TestWithRedisURI documents a separate known limitation (reported, not fixed
-// here): the WithRedisURI doc comment advertises "redis+cluster://" and
-// "redis+sentinel://" URIs, but the asynq parser only understands "redis",
-// "rediss", "redis-socket", and "redis-sentinel" schemes. Both documented
-// non-single forms panic; there is no cluster scheme at all. (The former
-// "value-type overrides are dropped" defect is fixed; see
-// TestApplyRedisOptionsValueTypes and TestWithRedisURIThenOverrides.)
+// TestWithRedisURI pins the schemes the WithRedisURI option (via
+// asynq.ParseRedisURI) actually accepts: "redis", "rediss", "redis-socket",
+// and "redis-sentinel". The "redis+cluster://" and "redis+sentinel://" forms
+// are NOT supported by the parser (cluster mode goes through
+// WithRedisType/WithRedisConnOpt instead), and the option's doc comment
+// matches that. (The former "value-type overrides are dropped" defect is
+// fixed; see TestApplyRedisOptionsValueTypes and TestWithRedisURIThenOverrides.)
 func TestWithRedisURI(t *testing.T) {
 	single := NewServer(WithRedisURI("redis://127.0.0.1:6379"))
 	opt, ok := single.redisConnOpt.(asynq.RedisClientOpt)
@@ -102,7 +102,7 @@ func TestWithRedisURI(t *testing.T) {
 
 	assert.Panics(t, func() {
 		WithRedisURI("redis+cluster://127.0.0.1:7000,127.0.0.1:7001")(NewServer())
-	}, "the documented redis+cluster scheme is not supported (known defect)")
+	}, "redis+cluster is not a parser-supported scheme (the doc comment matches)")
 
 	assert.Panics(t, func() {
 		WithRedisURI("://not-a-uri")(NewServer())
@@ -449,12 +449,14 @@ func TestMessageHandlerDataCreate(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestStopLifecycleWithoutStart verifies the shutdown path without Redis.
-// Note: a second Stop attempts to close the already-closed redis client and
-// therefore returns an error — Stop is not fully idempotent (minor wart worth
-// knowing when calling Stop after Start already drained everything).
+// TestStopLifecycleWithoutStart verifies the shutdown path without Redis and
+// pins that Stop is idempotent: only the first Stop closes the components,
+// subsequent Stops are no-ops returning nil.
 func TestStopLifecycleWithoutStart(t *testing.T) {
 	srv := NewServer()
 	assert.NoError(t, srv.Stop(t.Context()))
-	assert.Error(t, srv.Stop(t.Context()),
-		"the second Stop trips over the closed redis client")
+	assert.NoError(t, srv.Stop(t.Context()),
+		"Stop must be idempotent: the second Stop is a no-op")
+	assert.NoError(t, srv.Stop(t.Context()),
+		"Stop must be idempotent: the third Stop is a no-op")
 }

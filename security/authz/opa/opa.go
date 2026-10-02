@@ -76,6 +76,15 @@ func NewEngine(_ context.Context, opts ...OptFunc) (*State, error) {
 	return &s, nil
 }
 
+// logger 返回状态持有的日志器。State 只有经 NewEngine 构造才有 log：
+// 直接 &State{}（零值）时回退到包默认日志器，避免错误路径解引用 nil panic。
+func (s *State) logger() windlog.Logger {
+	if s.log == nil {
+		return windlog.GetLogger().With("module", "opa.authz.engine")
+	}
+	return s.log
+}
+
 func (s *State) init(opts ...OptFunc) error {
 	var err error
 
@@ -107,7 +116,7 @@ func (s *State) ParseProjectsQuery(query string) error {
 
 	authzProjectsQueryParsed, err := ast.ParseBody(query)
 	if err != nil {
-		s.log.Error(context.Background(), "failed to parse authz projects query", "query", query, "error", err)
+		s.logger().Error(context.Background(), "failed to parse authz projects query", "query", query, "error", err)
 		return errors.Wrapf(err, "parse query %q", query)
 	}
 
@@ -129,7 +138,7 @@ func (s *State) ParseFilterPairsQuery(query string) error {
 
 	filteredPairsQueryParsed, err := ast.ParseBody(query)
 	if err != nil {
-		s.log.Error(context.Background(), "failed to parse filtered pairs query", "query", query, "error", err)
+		s.logger().Error(context.Background(), "failed to parse filtered pairs query", "query", query, "error", err)
 		return errors.Wrapf(err, "parse query %q", query)
 	}
 
@@ -151,7 +160,7 @@ func (s *State) ParseFilterProjectsQuery(query string) error {
 
 	filteredProjectsQueryParsed, err := ast.ParseBody(query)
 	if err != nil {
-		s.log.Error(context.Background(), "failed to parse filtered projects query", "query", query, "error", err)
+		s.logger().Error(context.Background(), "failed to parse filtered projects query", "query", query, "error", err)
 		return errors.Wrapf(err, "parse query %q", query)
 	}
 
@@ -189,7 +198,7 @@ func (s *State) ProjectsAuthorized(
 	)
 	resultSet, err := s.preparedEvalProjects.Eval(ctx, rego.EvalParsedInput(input))
 	if err != nil {
-		s.log.Error(ctx, "failed to evaluate projects query", "error", err)
+		s.logger().Error(ctx, "failed to evaluate projects query", "error", err)
 		return engine.Projects{}, &EvaluationError{e: err}
 	}
 
@@ -208,7 +217,7 @@ func (s *State) FilterAuthorizedPairs(
 
 	rs, err := s.evalQuery(ctx, s.queries[FilteredPairsQueryKey], opaInput, s.store)
 	if err != nil {
-		s.log.Error(ctx, "failed to evaluate filtered pairs query", "error", err)
+		s.logger().Error(ctx, "failed to evaluate filtered pairs query", "error", err)
 		return nil, &EvaluationError{e: err}
 	}
 
@@ -222,7 +231,7 @@ func (s *State) FilterAuthorizedProjects(ctx context.Context, subjects engine.Su
 
 	rs, err := s.evalQuery(ctx, s.queries[FilteredProjectsQueryKey], opaInput, s.store)
 	if err != nil {
-		s.log.Error(ctx, "failed to evaluate filtered projects query", "error", err)
+		s.logger().Error(ctx, "failed to evaluate filtered projects query", "error", err)
 		return nil, &EvaluationError{e: err}
 	}
 
@@ -245,7 +254,7 @@ func (s *State) IsAuthorized(
 		)
 		resultSet, err := s.preparedEvalProjects.Eval(ctx, rego.EvalParsedInput(input))
 		if err != nil {
-			s.log.Error(ctx, "failed to evaluate projects query", "error", err)
+			s.logger().Error(ctx, "failed to evaluate projects query", "error", err)
 			return false, &EvaluationError{e: err}
 		}
 		return s.allowedFromPreparedEvalQuery(resultSet)
@@ -257,7 +266,7 @@ func (s *State) IsAuthorized(
 
 		rs, err := s.evalQuery(ctx, s.queries[FilteredPairsQueryKey], opaInput, s.store)
 		if err != nil {
-			s.log.Error(ctx, "failed to evaluate filtered pairs query", "error", err)
+			s.logger().Error(ctx, "failed to evaluate filtered pairs query", "error", err)
 			return false, &EvaluationError{e: err}
 		}
 
@@ -284,7 +293,7 @@ func (s *State) InitModulesFromFiles(modules map[string]string) error {
 
 		parsed, err := ast.ParseModule(name, string(moduleData))
 		if err != nil {
-			s.log.Error(context.Background(), "failed to parse module file", "name", name, "error", err)
+			s.logger().Error(context.Background(), "failed to parse module file", "name", name, "error", err)
 			return errors.Wrapf(err, "parse module %q", name)
 		}
 
@@ -301,7 +310,7 @@ func (s *State) InitModulesFromString(modules map[string]string) error {
 	for name, moduleData := range modules {
 		parsed, err := ast.ParseModule(name, moduleData)
 		if err != nil {
-			s.log.Error(context.Background(), "failed to parse module file", "name", name, "error", err)
+			s.logger().Error(context.Background(), "failed to parse module file", "name", name, "error", err)
 			return errors.Wrapf(err, "parse module %q", name)
 		}
 
@@ -321,7 +330,7 @@ func (s *State) InitModulesFromAssets() error {
 		}
 		parsed, err := ast.ParseModule(name, string(MustAsset(name)))
 		if err != nil {
-			s.log.Error(context.Background(), "failed to parse policy file", "name", name, "error", err)
+			s.logger().Error(context.Background(), "failed to parse policy file", "name", name, "error", err)
 			return errors.Wrapf(err, "parse policy file %q", name)
 		}
 		mods[name] = parsed
@@ -335,7 +344,7 @@ func (s *State) InitModulesFromAssets() error {
 func (s *State) doCompile() error {
 	compiler, err := s.newCompiler()
 	if err != nil {
-		s.log.Error(context.Background(), "failed to create compiler", "error", err)
+		s.logger().Error(context.Background(), "failed to create compiler", "error", err)
 		return errors.Wrap(err, "init compiler")
 	}
 
@@ -377,7 +386,7 @@ func (s *State) initModules() error {
 func (s *State) makeAuthorizedProjectPreparedQuery(ctx context.Context) error {
 	compiler, err := s.newCompiler()
 	if err != nil {
-		s.log.Error(ctx, "failed to create compiler", "error", err)
+		s.logger().Error(ctx, "failed to create compiler", "error", err)
 		return err
 	}
 
@@ -393,7 +402,7 @@ func (s *State) makeAuthorizedProjectPreparedQuery(ctx context.Context) error {
 
 	pq, err := r.Partial(ctx)
 	if err != nil {
-		s.log.Error(ctx, "failed to create partial query for authorized projects", "error", err)
+		s.logger().Error(ctx, "failed to create partial query for authorized projects", "error", err)
 		return err
 	}
 
@@ -419,7 +428,7 @@ func (s *State) makeAuthorizedProjectPreparedQuery(ctx context.Context) error {
 	compiler.Compile(compiler.Modules)
 
 	if compiler.Failed() {
-		s.log.Error(ctx, "failed to compile authorized projects", "error", compiler.Errors)
+		s.logger().Error(ctx, "failed to compile authorized projects", "error", compiler.Errors)
 		return compiler.Errors
 	}
 
@@ -432,7 +441,7 @@ func (s *State) makeAuthorizedProjectPreparedQuery(ctx context.Context) error {
 
 	query, err := r2.PrepareForEval(ctx)
 	if err != nil {
-		s.log.Error(ctx, "failed to prepare for eval", "error", err)
+		s.logger().Error(ctx, "failed to prepare for eval", "error", err)
 		return errors.Wrap(err, "prepare query for eval (authorized_project)")
 	}
 
@@ -445,7 +454,7 @@ func (s *State) newCompiler() (*ast.Compiler, error) {
 	compiler := ast.NewCompiler()
 	compiler.Compile(s.modules)
 	if compiler.Failed() {
-		s.log.Error(context.Background(), "failed to compile modules", "error", compiler.Errors)
+		s.logger().Error(context.Background(), "failed to compile modules", "error", compiler.Errors)
 		return nil, errors.Wrap(compiler.Errors, "compile modules")
 	}
 
@@ -471,7 +480,7 @@ func (s *State) dumpData(ctx context.Context, store storage.Store) error {
 		return err
 	}
 
-	s.log.Info(ctx, "data", "data", string(jsonData))
+	s.logger().Info(ctx, "data", "data", string(jsonData))
 
 	return store.Commit(ctx, txn)
 }
@@ -491,14 +500,14 @@ func (s *State) evalQuery(ctx context.Context, query ast.Body, input interface{}
 		rego.SetRegoVersion(s.regoVersion),
 	).Eval(ctx)
 	if err != nil {
-		s.log.Error(ctx, "failed to evaluate query", "error", err)
+		s.logger().Error(ctx, "failed to evaluate query", "error", err)
 		return nil, err
 	}
 
 	if tracer != nil && tracer.Enabled() {
 		var buffer bytes.Buffer
 		topdown.PrettyTrace(&buffer, *tracer)
-		s.log.Debug(ctx, "query trace", "trace", buffer.String())
+		s.logger().Debug(ctx, "query trace", "trace", buffer.String())
 	}
 
 	return rs, nil
@@ -563,7 +572,7 @@ func (s *State) projectsFromPartialResults(rs rego.ResultSet) (engine.Projects, 
 
 	projects, err := s.stringArrayFromResults(r.Expressions)
 	if err != nil {
-		s.log.Error(context.Background(), "failed to parse projects", "error", err)
+		s.logger().Error(context.Background(), "failed to parse projects", "error", err)
 		return nil, &UnexpectedResultExpressionError{exps: r.Expressions}
 	}
 

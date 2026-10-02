@@ -19,6 +19,9 @@ var (
 type apollo struct {
 	client agollo.Client
 	opt    *options
+	// startErr 记录 agollo 启动失败：构造函数签名无法返回错误，
+	// 因此把错误保存起来，由 Load/WatchValue 冒泡返回，而不是 panic。
+	startErr error
 }
 
 func NewSource(opts ...Option) *apollo {
@@ -35,10 +38,12 @@ func NewSource(opts ...Option) *apollo {
 			IsBackupConfig:   op.isBackupConfig,
 			Secret:           op.secret,
 			BackupConfigPath: op.backupPath,
+			MustStart:        op.mustStart,
 		}, nil
 	})
 	if err != nil {
-		panic(err)
+		// 启动失败不再 panic：返回携带错误的 source，错误从 Load/WatchValue 冒泡。
+		return &apollo{opt: &op, startErr: err}
 	}
 	return &apollo{client: client, opt: &op}
 }
@@ -77,6 +82,10 @@ func (e *apollo) getOriginConfig(ns string) ([]byte, error) {
 // It returns the raw configuration bytes for the given namespace (or the
 // configured default namespace when key is empty).
 func (e *apollo) Load(_ context.Context, key string) ([]byte, error) {
+	if e.startErr != nil {
+		return nil, e.startErr
+	}
+
 	ns := e.resolveNamespace(key)
 
 	if e.opt.originConfig && strings.Contains(ns, ".") &&
@@ -91,6 +100,10 @@ func (e *apollo) Load(_ context.Context, key string) ([]byte, error) {
 // It returns a channel that receives the new value each time the configuration
 // for the given namespace (or the configured default) changes.
 func (e *apollo) WatchValue(ctx context.Context, key string) (<-chan []byte, error) {
+	if e.startErr != nil {
+		return nil, e.startErr
+	}
+
 	ns := e.resolveNamespace(key)
 	return newWatchValueChannel(ctx, e, ns)
 }

@@ -47,7 +47,7 @@ func WithModules(mods map[string]*ast.Module) OptFunc {
 func WithModulesFromFiles(modules map[string]string) OptFunc {
 	return func(s *State) {
 		if err := s.InitModulesFromFiles(modules); err != nil {
-			s.log.Error(context.Background(), "failed to init modules from files", "error", err)
+			s.logger().Error(context.Background(), "failed to init modules from files", "error", err)
 		}
 	}
 }
@@ -55,7 +55,7 @@ func WithModulesFromFiles(modules map[string]string) OptFunc {
 func WithModulesFromString(modules map[string]string) OptFunc {
 	return func(s *State) {
 		if err := s.InitModulesFromString(modules); err != nil {
-			s.log.Error(context.Background(), "failed to init modules from string", "error", err)
+			s.logger().Error(context.Background(), "failed to init modules from string", "error", err)
 		}
 	}
 }

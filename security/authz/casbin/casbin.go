@@ -2,6 +2,7 @@ package casbin
 
 import (
 	"context"
+	"fmt"
 
 	windlog "github.com/tx7do/go-wind/log"
 
@@ -34,6 +35,12 @@ type State struct {
 	policy   *Adapter
 	enforcer *stdCasbin.SyncedEnforcer
 
+	// modelOptErr 记录模型选项（WithStringModel/WithFileModel/WithDefaultModel）
+	// 的解析/加载失败：OptFunc 无法返回错误，由 NewEngine 冒泡返回，
+	// 而不是静默回退默认模型。只有未提供任何模型选项（或选项全部成功）时
+	// 才会回退到编译内置的默认模型。
+	modelOptErr error
+
 	projects                  engine.Projects
 	wildcardItem              string
 	authorizedProjectsMatcher string
@@ -64,7 +71,15 @@ func (s *State) init(opts ...OptFunc) error {
 
 	var err error
 
+	// 显式提供的模型选项加载失败：冒泡给调用方，不回退默认模型。
+	if s.modelOptErr != nil {
+		err = fmt.Errorf("casbin: model option failed: %w", s.modelOptErr)
+		s.log.Error(context.Background(), "failed to create casbin model from options", "error", err)
+		return err
+	}
+
 	if s.model == nil {
+		// 未提供任何模型选项时才使用默认模型。
 		s.model, err = model.NewModelFromString(assets.DefaultRestfullWithRoleModel)
 		if err != nil {
 			s.log.Error(context.Background(), "failed to create casbin model", "error", err)

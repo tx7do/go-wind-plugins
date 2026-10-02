@@ -13,6 +13,7 @@ import (
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/storage/inmem"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	engine "github.com/tx7do/go-wind-plugins/security/authz"
@@ -1025,4 +1026,28 @@ func getRandomRole(roleMap map[string]interface{}) string {
 	randomIndex := rand.Intn(len(roleIDs))
 	roleID := roleIDs[randomIndex]
 	return roleID
+}
+
+// ---------------------------------------------------------------------------
+// Bare &State{} error paths (regression: s.log was only initialized by
+// NewEngine, so a directly constructed State panicked on error paths)
+// ---------------------------------------------------------------------------
+
+// TestBareState_ErrorPathsDoNotPanic pins that a State constructed directly
+// (&State{} — no logger, no store, no queries) can hit logging error paths
+// without a nil-pointer panic: logger() falls back to the package default.
+func TestBareState_ErrorPathsDoNotPanic(t *testing.T) {
+	s := &State{}
+
+	assert.NotPanics(t, func() {
+		err := s.ParseProjectsQuery("this is !! not a rego query")
+		assert.Error(t, err)
+	})
+
+	assert.NotPanics(t, func() {
+		err := s.InitModulesFromString(map[string]string{
+			"bad": "~~~ definitely not a rego module",
+		})
+		assert.Error(t, err)
+	})
 }

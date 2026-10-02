@@ -66,7 +66,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
-
 	if s.err = s.Init(); s.err != nil {
 		LogErrorf("init broker failed: [%s]", s.err.Error())
 		return s.err
@@ -82,9 +81,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// 先置位再注册订阅：与 Stop 的交接由 doRegisterSubscriber 的 started 复查处理。
 	s.started.Store(true)
 
-
-	if s.err = s.doRegisterSubscriberMap(); s.err != nil {
-		return s.err
+	if err := s.doRegisterSubscriberMap(); err != nil {
+		// 订阅注册失败：回滚半启动状态（退订并断开连接），
+		// 保证失败的 Start 干净且可重试。
+		_ = s.Stop(ctx)
+		return err
 	}
 
 	s.baseCtx = ctx
@@ -118,7 +119,6 @@ func (s *Server) Stop(ctx context.Context) error {
 
 	err := s.Disconnect()
 	s.err = nil
-
 
 	LogInfo("server stopped.")
 

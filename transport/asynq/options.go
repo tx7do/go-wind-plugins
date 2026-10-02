@@ -68,10 +68,14 @@ func WithRedisConnOpt(redisConnOpt asynq.RedisConnOpt) Option {
 }
 
 // WithRedisURI 通过 URI 字符串设置 Redis 连接。
-// 支持格式：
-//   - 单节点: redis://[:password@]host:port[/db]
-//   - 集群:   redis+cluster://[:password@]host1:port1,host2:port2,...[/db]
-//   - 哨兵:   redis+sentinel://[:password@]host1:port1,.../mastername[/db]
+// 支持格式（与 asynq.ParseRedisURI 一致；集群模式请改用
+// WithRedisType(RedisTypeCluster) 或 WithRedisConnOpt）：
+//   - 单节点:      redis://[:password@]host:port[/db]
+//   - 单节点 TLS:  rediss://[:password@]host:port[/db]
+//   - Unix 套接字: redis-socket:///path/to/socket[?db=N]
+//   - 哨兵:        redis-sentinel://[:password@]host1:port1,host2:port2?master=mastername
+//
+// URI 无法解析时 panic。
 func WithRedisURI(uri string) Option {
 	return func(s *Server) {
 		redisConnOpt, err := asynq.ParseRedisURI(uri)

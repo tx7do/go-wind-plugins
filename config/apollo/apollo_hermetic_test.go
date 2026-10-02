@@ -5,6 +5,7 @@ import (
 	"context"
 	stdjson "encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -526,5 +527,38 @@ func TestAppConfigAssembly(t *testing.T) {
 	if cfg.AppID != "demo" || cfg.Cluster != "dev" || cfg.NamespaceName != "application" ||
 		cfg.IP != "http://127.0.0.1:8080" || cfg.Secret != "k" || cfg.IsBackupConfig {
 		t.Errorf("AppConfig assembly mismatch: %+v", cfg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NewSource startup failure (real agollo start against an unreachable endpoint)
+// ---------------------------------------------------------------------------
+
+// TestNewSource_StartupFailureNonFatal pins the non-fatal startup failure
+// contract: when agollo cannot start (unreachable endpoint + WithMustStart),
+// NewSource must not panic; the error is stored in the source and surfaced
+// from Load and WatchValue instead.
+// Note: agollo retries the first sync with a fixed 2s backoff, so the
+// failing start takes ~10s by design.
+func TestNewSource_StartupFailureNonFatal(t *testing.T) {
+	src := NewSource(
+		WithAppID("startup-failure-app"),
+		WithCluster("default"),
+		WithNamespace("application"),
+		WithEndpoint("http://127.0.0.1:1"), // unreachable: connection refused
+		WithMustStart(),
+	)
+	if src == nil {
+		t.Fatal("NewSource returned nil")
+	}
+
+	if _, err := src.Load(context.Background(), ""); err == nil {
+		t.Fatal("expected the stored startup error from Load, got nil")
+	} else if !strings.Contains(err.Error(), "start failed") {
+		t.Fatalf("expected the agollo startup error from Load, got: %v", err)
+	}
+
+	if _, err := src.WatchValue(context.Background(), ""); err == nil {
+		t.Fatal("expected the stored startup error from WatchValue, got nil")
 	}
 }

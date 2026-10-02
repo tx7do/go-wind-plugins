@@ -83,10 +83,11 @@ func TestWithDefaultModel(t *testing.T) {
 		})
 	}
 
-	t.Run("unknown name leaves a nil model, init falls back to default", func(t *testing.T) {
+	t.Run("unknown name is surfaced as a constructor error", func(t *testing.T) {
 		s, err := NewEngine(t.Context(), WithDefaultModel("unknown-name"))
-		require.NoError(t, err)
-		assert.NotNil(t, s.model)
+		require.Error(t, err)
+		assert.Nil(t, s)
+		assert.Contains(t, err.Error(), "unknown default model")
 	})
 }
 
@@ -97,10 +98,19 @@ func TestWithStringModel(t *testing.T) {
 		assert.NotNil(t, s.model)
 	})
 
-	t.Run("invalid model falls back to the default", func(t *testing.T) {
-		// WithStringModel swallows the parse error, leaving the model nil;
-		// init then rebuilds the compiled-in default model.
+	t.Run("invalid model surfaces a constructor error", func(t *testing.T) {
+		// WithStringModel records the parse error and NewEngine returns it
+		// instead of silently falling back to the compiled-in default model.
 		s, err := NewEngine(t.Context(), WithStringModel("not a casbin model"))
+		require.Error(t, err)
+		assert.Nil(t, s)
+	})
+
+	t.Run("a later valid model option supersedes an earlier failure", func(t *testing.T) {
+		s, err := NewEngine(t.Context(),
+			WithStringModel("not a casbin model"),
+			WithStringModel(assets.DefaultRestfullWithRoleModel),
+		)
 		require.NoError(t, err)
 		assert.NotNil(t, s.model)
 	})

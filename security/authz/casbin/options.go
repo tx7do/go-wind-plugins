@@ -1,6 +1,8 @@
 package casbin
 
 import (
+	"fmt"
+
 	"github.com/casbin/casbin/v2/model"
 	windlog "github.com/tx7do/go-wind/log"
 
@@ -12,24 +14,42 @@ type OptFunc func(*State)
 
 func WithModel(model model.Model) OptFunc {
 	return func(s *State) {
+		// 后设置的模型选项覆盖先前的（含先前记录的失败）。
+		s.modelOptErr = nil
 		s.model = model
 	}
 }
 
 func WithStringModel(str string) OptFunc {
 	return func(s *State) {
-		s.model, _ = model.NewModelFromString(str)
+		s.modelOptErr = nil
+		m, err := model.NewModelFromString(str)
+		if err != nil {
+			// OptFunc 无法返回错误：记录下来，由 NewEngine 冒泡返回，
+			// 不再静默回退到默认模型。
+			s.modelOptErr = err
+			return
+		}
+		s.model = m
 	}
 }
 
 func WithFileModel(path string) OptFunc {
 	return func(s *State) {
-		s.model, _ = model.NewModelFromFile(path)
+		s.modelOptErr = nil
+		m, err := model.NewModelFromFile(path)
+		if err != nil {
+			// 同 WithStringModel：记录错误，由 NewEngine 冒泡返回。
+			s.modelOptErr = err
+			return
+		}
+		s.model = m
 	}
 }
 
 func WithDefaultModel(name string) OptFunc {
 	return func(s *State) {
+		s.modelOptErr = nil
 		var str string
 		switch name {
 		case "rbac":
@@ -51,7 +71,18 @@ func WithDefaultModel(name string) OptFunc {
 			str = assets.DefaultRestfullWithRoleModel
 		}
 
-		s.model, _ = model.NewModelFromString(str)
+		if str == "" {
+			s.modelOptErr = fmt.Errorf("casbin: unknown default model %q", name)
+			return
+		}
+
+		m, err := model.NewModelFromString(str)
+		if err != nil {
+			// 同 WithStringModel：记录错误，由 NewEngine 冒泡返回。
+			s.modelOptErr = err
+			return
+		}
+		s.model = m
 	}
 }
 

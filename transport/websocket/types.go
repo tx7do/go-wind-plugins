@@ -28,11 +28,12 @@ type MessageHandlerData struct {
 }
 
 // Create 调用 Creator 创建载荷实例。如果 Creator 为 nil 则返回 nil。
+// nil 接收者同样返回 nil：调用方把 nil 载荷回退为原始字节，不会解引用 handler。
 func (h *MessageHandlerData) Create() any {
-	if h.Creator != nil {
-		return h.Creator()
+	if h == nil || h.Creator == nil {
+		return nil
 	}
-	return nil
+	return h.Creator()
 }
 
 // NetMessageHandlerMap 将消息类型映射到其处理器数据。

@@ -68,6 +68,9 @@ type Server struct {
 	mu sync.Mutex
 
 	started atomic.Bool
+	// stopped 记录 stopInternal 已执行过一次，保证 Stop 幂等：
+	// 重复 Stop 不会二次关闭已关闭的 redis 客户端而报错。
+	stopped atomic.Bool
 
 	server    *asynq.Server
 	client    *asynq.Client
@@ -288,6 +291,9 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 
+	// 允许 Stop 后重新 Start：重置幂等停止标记
+	s.stopped.Store(false)
+
 	if s.server == nil {
 		if err := s.createAsynqServer(); err != nil {
 			return err
@@ -344,6 +350,12 @@ func (s *Server) Stop(ctx context.Context) error {
 
 func (s *Server) stopInternal(ctx context.Context) error {
 	var stopErr error
+
+	// Stop 幂等：只有第一次执行真正关闭组件，
+	// 之后的 Stop（含 Start 退出后的补一次 Stop）直接返回。
+	if s.stopped.Swap(true) {
+		return nil
+	}
 
 	// 1. 清理定时任务注册表
 	s.removeAllPeriodicTaskInternal()

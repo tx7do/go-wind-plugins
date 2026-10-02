@@ -8,7 +8,7 @@ import (
 )
 
 // TestOffsetPaginator_BuildClause 验证 offset 分页子句的生成：
-// offset>0 时 LIMIT/OFFSET 同现，offset=0 时仅 LIMIT，limit<=0 时不改写 builder。
+// offset>0 时 LIMIT/OFFSET 同现，offset=0 时仅 LIMIT，limit<=0 被兜底为 LIMIT 1。
 func TestOffsetPaginator_BuildClause(t *testing.T) {
 	// offset > 0：LIMIT 与 OFFSET 同现
 	p := NewOffsetPaginator()
@@ -30,9 +30,8 @@ func TestOffsetPaginator_BuildClause(t *testing.T) {
 		t.Errorf("expected bare LIMIT 5, got %q", sql)
 	}
 
-	// NOTE: 文档注释称 limit<=0 时返回空子句，但实现里 Limit() 会把非正值
-	// 兜底为 1，实际产出 "LIMIT 1"。测试对齐当前行为（注释与行为不一致，
-	// 见报告）。offset 仍被保留。
+	// limit<=0 被分页器兜底为 1，产出 "LIMIT 1"（与 BuildClause 的文档注释一致）。
+	// offset 仍被保留。
 	b = query.NewQueryBuilder("t1", nil)
 	ret := NewOffsetPaginator().BuildClause(b, 10, 0)
 	if ret == nil {
@@ -45,7 +44,7 @@ func TestOffsetPaginator_BuildClause(t *testing.T) {
 }
 
 // TestPagePaginator_BuildClause 验证页码分页子句的生成：
-// page>1 时 LIMIT/OFFSET 同现，第一页仅 LIMIT，size<=0 时不改写 builder。
+// page>1 时 LIMIT/OFFSET 同现，第一页仅 LIMIT，size<=0 被兜底为 LIMIT 1。
 func TestPagePaginator_BuildClause(t *testing.T) {
 	// page 3, size 10 => OFFSET 20 LIMIT 10
 	p := NewPagePaginator()
@@ -67,7 +66,7 @@ func TestPagePaginator_BuildClause(t *testing.T) {
 		t.Errorf("expected bare LIMIT 7 on the first page, got %q", sql)
 	}
 
-	// NOTE: 同上，size<=0 被 Size() 兜底为 1，产出 "LIMIT 1 OFFSET 1"。
+	// 同上，size<=0 被兜底为 1，产出 "LIMIT 1 OFFSET 1"。
 	b = query.NewQueryBuilder("t1", nil)
 	NewPagePaginator().BuildClause(b, 2, 0)
 	sql, _ = b.Build()
