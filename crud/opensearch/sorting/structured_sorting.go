@@ -3,9 +3,9 @@ package sorting
 import (
 	"strings"
 
+	"github.com/tx7do/go-utils/stringcase"
 	paginationV1 "github.com/tx7do/go-wind-plugins/crud/api/gen/go/pagination/v1"
 	"github.com/tx7do/go-wind-plugins/crud/opensearch/query"
-	"github.com/tx7do/go-utils/stringcase"
 )
 
 // StructuredSorting 将结构化排序指令转换为 OpenSearch 的 sort 数组

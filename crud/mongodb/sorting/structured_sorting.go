@@ -3,9 +3,9 @@ package sorting
 import (
 	"strings"
 
+	"github.com/tx7do/go-utils/stringcase"
 	paginationV1 "github.com/tx7do/go-wind-plugins/crud/api/gen/go/pagination/v1"
 	"github.com/tx7do/go-wind-plugins/crud/mongodb/query"
-	"github.com/tx7do/go-utils/stringcase"
 	bsonV2 "go.mongodb.org/mongo-driver/v2/bson"
 )
 

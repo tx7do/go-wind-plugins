@@ -3,9 +3,9 @@ package sorting
 import (
 	"strings"
 
+	"github.com/tx7do/go-utils/stringcase"
 	paginationV1 "github.com/tx7do/go-wind-plugins/crud/api/gen/go/pagination/v1"
 	"github.com/tx7do/go-wind-plugins/crud/influxdb/query"
-	"github.com/tx7do/go-utils/stringcase"
 )
 
 // StructuredSorting 将结构化排序指令转换为 InfluxDB 的 ORDER BY 子句

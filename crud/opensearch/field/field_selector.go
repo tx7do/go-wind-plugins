@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tx7do/go-wind-plugins/crud/opensearch/query"
 	"github.com/tx7do/go-utils/stringcase"
+	"github.com/tx7do/go-wind-plugins/crud/opensearch/query"
 )
 
 var fieldNameRegexp = regexp.MustCompile(`^[A-Za-z0-9_.]+$`)

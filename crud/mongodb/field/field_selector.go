@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tx7do/go-wind-plugins/crud/mongodb/query"
 	"github.com/tx7do/go-utils/stringcase"
+	"github.com/tx7do/go-wind-plugins/crud/mongodb/query"
 	bsonV2 "go.mongodb.org/mongo-driver/v2/bson"
 )
 

@@ -7,8 +7,8 @@ import (
 	"github.com/tx7do/go-wind-plugins/encoding"
 	_ "github.com/tx7do/go-wind-plugins/encoding/json"
 
-	"github.com/tx7do/go-wind-plugins/crud/mongodb/query"
 	"github.com/tx7do/go-utils/stringcase"
+	"github.com/tx7do/go-wind-plugins/crud/mongodb/query"
 
 	paginationV1 "github.com/tx7do/go-wind-plugins/crud/api/gen/go/pagination/v1"
 	bsonV2 "go.mongodb.org/mongo-driver/v2/bson"
