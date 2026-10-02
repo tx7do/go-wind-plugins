@@ -1,0 +1,46 @@
+name: CI
+
+# 多模块仓库：每个 go.mod 独立编译（GOWORK=off），保证以模块代理拉取时
+# go.mod/go.sum 自洽；测试仅跑不依赖外部服务的纯逻辑模块。
+on:
+  push:
+    branches: [main]
+    tags: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Build all modules standalone
+        run: |
+          set -e
+          find . -name go.mod -not -path "./.zcode/*" | while read -r mod; do
+            dir=$(dirname "$mod")
+            echo "::group::build $dir"
+            (cd "$dir" && env GOWORK=off go build ./...)
+            echo "::endgroup::"
+          done
+
+      - name: Vet service-free modules
+        run: |
+          set -e
+          for m in selector resolver; do
+            (cd "$m" && env GOWORK=off go vet ./...)
+          done
+
+      - name: Test service-free modules
+        run: |
+          set -e
+          for m in selector resolver; do
+            echo "::group::test $m"
+            (cd "$m" && env GOWORK=off go test -count=1 ./...)
+            echo "::endgroup::"
+          done

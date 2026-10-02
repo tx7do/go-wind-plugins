@@ -41,6 +41,16 @@ func (d *chiDriver) Handle(method, path string, handler http.HandlerFunc) {
 	d.router.MethodFunc(method, path, handler)
 }
 
+// HandlePrefix 在 prefix 下挂载前缀路由。
+// chi 的 Mount 会剥离挂载前缀，这里将原始路径还原后再交给 handler，
+// 以满足 Driver 契约：handler 收到未经 strip 的原始请求路径。
+func (d *chiDriver) HandlePrefix(prefix string, h http.Handler) {
+	d.router.Mount(prefix, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = prefix + r.URL.Path
+		h.ServeHTTP(w, r)
+	}))
+}
+
 // Start 启动服务器并阻塞，直到 ctx 被取消时执行优雅关闭。
 // listener 由 Server 创建并传入（已处理 TLS 包装）。
 func (d *chiDriver) Start(ctx context.Context, ln net.Listener) error {
