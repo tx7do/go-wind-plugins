@@ -23,4 +23,6 @@ func ExampleNew() {
 		map[string]string{"method": "GET", "path": "/"})
 	m.Gauge(context.Background(), "http_active_connections", 7, nil)
 	_ = m.Registry()
+
+	// Output:
 }

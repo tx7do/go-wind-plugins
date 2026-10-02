@@ -491,9 +491,23 @@ func TestServerOptions(t *testing.T) {
 	assert.Equal(t, 7, common.MaxIdle)
 	assert.Equal(t, 9, common.MaxActive)
 	assert.Equal(t, "secret", common.Password)
-	// Current behavior: NewServer appends its 24h read/idle defaults after
-	// the user options, so per-server WithReadTimeout/WithIdleTimeout values
-	// are overridden and not asserted here.
+
+	// User-provided read/idle timeouts must win over NewServer's 24h defaults,
+	// because the defaults are prepended before the user options.
+	srvUser := NewServer(
+		WithAddress("redis://127.0.0.1:6379"),
+		WithReadTimeout(11*time.Second),
+		WithIdleTimeout(13*time.Second),
+	)
+	commonUser := poolOptions(t, srvUser)
+	assert.Equal(t, 11*time.Second, commonUser.ReadTimeout, "user WithReadTimeout must override the NewServer default")
+	assert.Equal(t, 13*time.Second, commonUser.IdleTimeout, "user WithIdleTimeout must override the NewServer default")
+
+	// Without user options, the 24h defaults still apply so blocking
+	// subscriptions survive between polls.
+	commonDefault := poolOptions(t, NewServer())
+	assert.Equal(t, 24*time.Hour, commonDefault.ReadTimeout)
+	assert.Equal(t, 24*time.Hour, commonDefault.IdleTimeout)
 }
 
 func TestServerDriverTypeOption(t *testing.T) {

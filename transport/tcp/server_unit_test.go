@@ -3,6 +3,7 @@ package tcp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -615,16 +616,9 @@ func TestClientLoopbackExchange(t *testing.T) {
 		t.Fatal("server did not bind within 5s")
 	}
 
-	// Note: the client endpoint handling is quirky (reported as a bug): it
-	// parses the address as a URL but dials the same string back. A bare
-	// IP:port fails url.Parse (endpoint nil) and a scheme-prefixed URL fails
-	// net.Dial; only a letter-leading host:port round-trips, so dial via
-	// localhost here.
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		t.Fatalf("SplitHostPort(%q) failed: %v", addr, err)
-	}
-	cli := NewClient(WithEndpoint(net.JoinHostPort("localhost", port)))
+	// The client must accept the raw IP:port endpoint form directly (a
+	// regression test: endpoint parsing used to reject it).
+	cli := NewClient(WithEndpoint(addr))
 	defer cli.Disconnect()
 
 	if cli.codec == nil {
@@ -681,6 +675,158 @@ func TestClientNotConnectedErrors(t *testing.T) {
 	}
 	if err := cli.SendMessage(1, "payload"); err == nil {
 		t.Error("SendMessage before Connect returned nil error")
+	}
+}
+
+// closedLoopbackPort returns a loopback address whose port is (almost)
+// certainly closed: it binds a listener to grab a free port, then closes it.
+func closedLoopbackPort(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatalf("close listener failed: %v", err)
+	}
+	return addr
+}
+
+// TestClientDialAddressResolution pins the endpoint-to-dial-address mapping:
+// bare host:port (IPv4 and IPv6) and scheme-prefixed URLs must all resolve to
+// a dialable host:port.
+func TestClientDialAddressResolution(t *testing.T) {
+	cases := []struct {
+		endpoint string
+		want     string
+	}{
+		{"", ""},
+		{"127.0.0.1:9000", "127.0.0.1:9000"},
+		{"tcp://127.0.0.1:9000", "127.0.0.1:9000"},
+		{"localhost:9000", "localhost:9000"},
+		{"[::1]:9000", "[::1]:9000"},
+		{"tcp://[::1]:9000", "[::1]:9000"},
+	}
+	for _, tc := range cases {
+		cli := NewClient(WithEndpoint(tc.endpoint))
+		if got := cli.dialAddress(); got != tc.want {
+			t.Errorf("dialAddress(%q) = %q, want %q", tc.endpoint, got, tc.want)
+		}
+	}
+}
+
+// TestClientConnectEndpointForms is a regression test for Client endpoint
+// parsing: every accepted endpoint form must reach the dial stage — a closed
+// port yields a dial error, never "endpoint is nil" — and a live server must
+// be reachable through each form.
+func TestClientConnectEndpointForms(t *testing.T) {
+	closed := closedLoopbackPort(t)
+	_, port, err := net.SplitHostPort(closed)
+	if err != nil {
+		t.Fatalf("SplitHostPort(%q) failed: %v", closed, err)
+	}
+
+	errorCases := []struct {
+		name     string
+		endpoint string
+	}{
+		{"bare ip:port", closed},
+		{"scheme url", "tcp://" + closed},
+		{"letter-leading host:port", "localhost:" + port},
+		{"bare ipv6", net.JoinHostPort("::1", port)},
+		{"scheme ipv6 url", "tcp://[::1]:" + port},
+	}
+	for _, tc := range errorCases {
+		t.Run("dial error/"+tc.name, func(t *testing.T) {
+			cli := NewClient(WithEndpoint(tc.endpoint))
+			defer cli.Disconnect()
+
+			err := cli.Connect()
+			if err == nil {
+				t.Fatal("Connect to a closed port returned nil error")
+			}
+			if strings.Contains(err.Error(), "endpoint is nil") {
+				t.Fatalf("Connect returned the endpoint-parse error %q, want a dial error", err)
+			}
+			var opErr *net.OpError
+			if !errors.As(err, &opErr) {
+				t.Fatalf("error = %q (%T), want a dial (*net.OpError) error", err, err)
+			}
+		})
+	}
+
+	successCases := []struct {
+		name     string
+		bind     string
+		endpoint func(addr string) string
+	}{
+		{"bare ip:port", "127.0.0.1:0", func(a string) string { return a }},
+		{"scheme url", "127.0.0.1:0", func(a string) string { return "tcp://" + a }},
+		{"bare ipv6", "[::1]:0", func(a string) string { return a }},
+	}
+
+	for _, tc := range successCases {
+		t.Run("connect/"+tc.name, func(t *testing.T) {
+			srv := NewServer(WithAddress(tc.bind))
+			got := make(chan string, 1)
+			RegisterServerMessageHandler(srv, MessageTypeChat, func(sessionId SessionID, msg *ChatMessage) error {
+				return srv.SendMessage(sessionId, MessageTypeChat, &ChatMessage{Message: "reply:" + msg.Message})
+			})
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			srvDone := make(chan error, 1)
+			go func() { srvDone <- srv.Start(ctx) }()
+
+			var addr string
+			deadline := time.Now().Add(5 * time.Second)
+			for time.Now().Before(deadline) {
+				endpoint := srv.Endpoint()
+				if strings.HasPrefix(endpoint, "tcp://") && !strings.HasSuffix(endpoint, ":0") {
+					addr = strings.TrimPrefix(endpoint, "tcp://")
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if addr == "" {
+				t.Fatal("server did not bind within 5s")
+			}
+
+			cli := NewClient(WithEndpoint(tc.endpoint(addr)))
+			defer cli.Disconnect()
+			RegisterClientMessageHandler(cli, MessageTypeChat, func(msg *ChatMessage) error {
+				got <- msg.Message
+				return nil
+			})
+
+			if err := cli.Connect(); err != nil {
+				t.Fatalf("Connect via %q failed: %v", tc.endpoint(addr), err)
+			}
+			if err := cli.SendMessage(MessageTypeChat, &ChatMessage{Message: "hi"}); err != nil {
+				t.Fatalf("SendMessage failed: %v", err)
+			}
+
+			select {
+			case msg := <-got:
+				if msg != "reply:hi" {
+					t.Errorf("client received %q, want %q", msg, "reply:hi")
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("client handler not invoked within 3s")
+			}
+
+			cli.Disconnect()
+			cancel()
+			select {
+			case err := <-srvDone:
+				if err != nil {
+					t.Errorf("server Start returned error: %v", err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("server Start did not return within 5s after cancellation")
+			}
+		})
 	}
 }
 

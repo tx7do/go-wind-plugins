@@ -522,11 +522,17 @@ func TestServerDriverTypes(t *testing.T) {
 		assert.Equal(t, driverType, srv.driverType)
 	}
 
-	// Unknown driver types leave the embedded broker nil; the server only
-	// fails when Start touches it. Current behavior, documented here.
+	// Unknown driver types leave the embedded broker nil; the error is stored
+	// in the server's sticky error field and surfaced by Start instead of
+	// panicking on the nil broker.
 	srv := NewServer(rocketmqOption.DriverType("unknown"))
 	assert.Nil(t, srv.Broker)
 	assert.NotNil(t, srv)
+
+	err := srv.Start(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broker is nil")
+	assert.Contains(t, err.Error(), "unknown")
 }
 
 ///////////////////////////////////////////////////////////////////////////////
