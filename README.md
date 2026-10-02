@@ -163,6 +163,13 @@
 | ServiceComb | `github.com/tx7do/go-wind-plugins/registry/servicecomb` | Apache ServiceComb |
 | Zookeeper | `github.com/tx7do/go-wind-plugins/registry/zookeeper` | Apache ZooKeeper |
 
+### 客户端发现（Selector / Resolver）
+
+| 模块 | 路径 | 说明 |
+|------|------|------|
+| Selector | `github.com/tx7do/go-wind-plugins/selector` | 负载均衡策略（RoundRobin/Random/First）+ 基于 Watch 的实时 Balancer |
+| Resolver | `github.com/tx7do/go-wind-plugins/resolver` | gRPC resolver.Builder：`grpc.NewClient("wind:///svc", grpc.WithResolvers(...))` 按注册中心寻址 |
+
 ### 日志（Log）
 
 | 插件 | 模块路径 | 引擎 |
@@ -715,6 +722,8 @@ go-wind-plugins/
 │   ├── zookeeper/                  # ZooKeeper
 │   ├── registrar.go                # Registrar 接口
 │   └── discovery.go                # Discovery / Watcher 接口
+├── selector/                       # 客户端负载均衡策略 + Watch Balancer
+├── resolver/                       # gRPC resolver.Builder 适配器
 ├── retry/                          # 重试策略
 ├── security/                       # 安全模块
 │   ├── authn/                      # 认证（JWT/OAuth2/OIDC）
