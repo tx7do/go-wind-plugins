@@ -8,6 +8,8 @@ replace github.com/tx7do/go-wind-plugins/crud/pagination => ../pagination
 
 replace github.com/tx7do/go-wind-plugins/crud/viewer => ../viewer
 
+replace github.com/tx7do/go-wind-plugins/crud/vector => ../vector
+
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.48.0
 	github.com/stretchr/testify v1.12.1
@@ -16,6 +18,7 @@ require (
 	github.com/tx7do/go-wind v0.0.2
 	github.com/tx7do/go-wind-plugins/crud/api v0.0.1
 	github.com/tx7do/go-wind-plugins/crud/pagination v0.0.1
+	github.com/tx7do/go-wind-plugins/crud/vector v0.0.1
 	github.com/tx7do/go-wind-plugins/crud/viewer v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1
 	google.golang.org/protobuf v1.36.12

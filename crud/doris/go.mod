@@ -8,16 +8,19 @@ replace github.com/tx7do/go-wind-plugins/crud/pagination => ../pagination
 
 replace github.com/tx7do/go-wind-plugins/crud/viewer => ../viewer
 
+replace github.com/tx7do/go-wind-plugins/crud/vector => ../vector
+
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/tx7do/go-utils v1.1.40
 	github.com/tx7do/go-utils/mapper v0.0.3
 	github.com/tx7do/go-wind v0.0.2
 	github.com/tx7do/go-wind-plugins/crud/api v0.0.1
 	github.com/tx7do/go-wind-plugins/crud/pagination v0.0.1
+	github.com/tx7do/go-wind-plugins/crud/vector v0.0.1
 	github.com/tx7do/go-wind-plugins/crud/viewer v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1
 	google.golang.org/protobuf v1.36.12
@@ -25,17 +28,13 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/gnostic v0.7.1 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1 // indirect
 	go.einride.tech/aip v0.86.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260908043556-f8649ddbbfe6 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260908043556-f8649ddbbfe6 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

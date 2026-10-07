@@ -10,6 +10,8 @@ replace github.com/tx7do/go-wind-plugins/crud/viewer => ../viewer
 
 replace github.com/tx7do/go-wind-plugins/crud/cache => ../cache
 
+replace github.com/tx7do/go-wind-plugins/crud/vector => ../vector
+
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.6.0
@@ -22,6 +24,7 @@ require (
 	github.com/tx7do/go-wind-plugins/crud/api v0.0.1
 	github.com/tx7do/go-wind-plugins/crud/cache v0.0.1
 	github.com/tx7do/go-wind-plugins/crud/pagination v0.0.1
+	github.com/tx7do/go-wind-plugins/crud/vector v0.0.1
 	github.com/tx7do/go-wind-plugins/crud/viewer v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding v0.0.1
 	github.com/tx7do/go-wind-plugins/encoding/json v0.0.1

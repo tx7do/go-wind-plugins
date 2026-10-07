@@ -112,12 +112,12 @@ cd /d/GoProject/go-wind-plugins/<module> && go build ./... && go vet ./...
 
 上游仓 `/d/GoProject/go-crud`（git，HEAD 为最新状态）是数据访问层工具库，与镜像
 `/d/GoProject/go-wind-plugins/crud/*` **模块一一对应**：api / audit / cache / cassandra /
-clickhouse / doris / elasticsearch / entgo / gorm / influxdb / mongodb / opensearch /
-pagination / viewer，共 14 个。上游根目录的 interface.go（空壳）不镜像。上游各模块
+clickhouse / doris / elasticsearch / entgo / gorm / influxdb / milvus / mongodb / neo4j /
+opensearch / pagination / qdrant / vector / viewer / weaviate，共 19 个。上游根目录的
+interface.go（空壳）不镜像，根 README/Makefile/upgrade 脚本不镜像。上游各模块
 自带类内 sibling replace（`=> ../api` 等），相对路径在本仓布局下语义不变，归一化后
-直接成立，无需增删。
-
-本轴为**忠实镜像**：无第一轴的"必须丢弃/禁改"清单，上游对模块源码的一切改动均移植。
+直接成立，无需增删。本轴为**忠实镜像**：无第一轴的"必须丢弃/禁改"清单，上游对模块
+源码的一切改动均移植。
 
 ## 归一化 diff 方法
 
@@ -151,7 +151,7 @@ import、require、replace）。上游对 `github.com/tx7do/go-wind-plugins/enco
 2. **`replace github.com/tx7do/go-crud => ../` 一律删除**（归一化后形如
    `replace github.com/tx7do/go-wind-plugins/crud => ../`）——它指向上游根模块，
    镜像没有 crud 根模块，留下即悬空。上游有 11 个模块带此行。
-3. **go.work（本仓根文件，非上游文件）**：`use` 含 14 个 `./crud/<module>` 路径；
+3. **go.work（本仓根文件，非上游文件）**：`use` 含 19 个 `./crud/<module>` 路径；
    `go` 行须 ≥ 各成员 go 指令最大值（当前 1.26.4，由 entgo 的 go 指令决定）。
    上游新增/移除模块或调整 go 指令时，同步维护本仓 go.work。
 4. **镜像测试文件保留分叉侧 KRATOS_IT 门控 hunk**（`skipWithoutIntegration`/
@@ -168,6 +168,18 @@ import、require、replace）。上游对 `github.com/tx7do/go-wind-plugins/enco
    mongodb/{field/field_selector.go,filter/filter_processor.go,repository_test.go,sorting/structured_sorting.go}；
    opensearch/{field/field_selector.go,opensearch_client_test.go,sorting/structured_sorting.go}；
    pagination/{filter/operator_converter_test.go,sorting/order_by_string_converter.go}。
+
+6. **crud/milvus/go.mod 的 `github.com/cockroachdb/errors` 钉在 v1.11.x 及以上**
+   （上游 v1.9.1）。上游无 go.work、模块孤立编译从未暴露：本仓 workspace 里
+   log/sentry 把 getsentry/sentry-go 抬到 v0.46.0（MVS 全局取最大），而
+   cockroachdb/errors v1.9.1 的 report 包引用了新版 sentry 已删除的
+   `sentry.Event.Extra`，milvus SDK（v2.4.2 自带 v1.9.1）即编译失败。同步上游
+   go.mod 时保留镜像侧的高版本 require，不得回退到上游版本号。
+7. **crud/weaviate/go.mod 的 `replace github.com/weaviate/weaviate => github.com/weaviate/weaviate v1.27.0`**
+   （镜像侧新增，上游无此行）。ai/langchaingo → tmc/langchaingo v0.1.14 把
+   weaviate 服务端模块抬到 v1.29.0，该版本删除了 `byteops.Float32ToByteVector`，
+   而 weaviate-go-client v4.16.1（已是最末版，无升级路径）的 grpc batch 按
+   v1.27.0 的 API 编写。replace 对 langchaingo 侧无影响（已验证其照常编译）。
 
 另：镜像侧存在上游没有的额外文件（分叉自建单测、example_test.go、带门控的测试变体）。
 协议的 diff 方向（上游→镜像）天然不涉及它们，同步不得删除或上报为差异。

@@ -60,10 +60,15 @@ use (
 	./crud/entgo
 	./crud/gorm
 	./crud/influxdb
+	./crud/milvus
 	./crud/mongodb
+	./crud/neo4j
 	./crud/opensearch
 	./crud/pagination
+	./crud/qdrant
+	./crud/vector
 	./crud/viewer
+	./crud/weaviate
 
 	./encoding
 	./encoding/avro
