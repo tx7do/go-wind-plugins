@@ -414,7 +414,7 @@ func TestEvalQuery_WithTracer(t *testing.T) {
 	query, err := ast.ParseBody("1 == 1")
 	require.NoError(t, err)
 
-	rs, err := s.evalQuery(t.Context(), query, nil, s.store)
+	rs, err := s.evalQuery(t.Context(), query, nil, s.snap.Load().store)
 	require.NoError(t, err)
 	require.NotEmpty(t, rs, "the trivial query should produce one result")
 	assert.True(t, s.enableQueryTracer)
@@ -454,7 +454,9 @@ func TestEngine_AuthorizationFlow(t *testing.T) {
 
 	policies, roles := testPoliciesAndRoles()
 	require.NoError(t, s.SetPolicies(t.Context(), policies, roles))
-	assert.NotNil(t, s.preparedEvalProjects, "SetPolicies must build the prepared projects query")
+	snap := s.snap.Load()
+	require.NotNil(t, snap)
+	assert.NotNil(t, snap.preparedEvalProjects, "SetPolicies must build the prepared projects query")
 
 	alice := engine.Subjects{"user:alice"}
 

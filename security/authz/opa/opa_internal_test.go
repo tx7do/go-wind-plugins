@@ -117,10 +117,14 @@ func BenchmarkFilterAuthorizedPairsRealWorldExample(b *testing.B) {
 
 	policies, roles := baselinePoliciesAndRoles()
 
-	s.store = inmem.NewFromObject(map[string]interface{}{
+	store := inmem.NewFromObject(map[string]interface{}{
 		"policies": policies,
 		"roles":    roles,
 	})
+
+	if err := s.publishPolicies(b.Context(), store); err != nil {
+		b.Fatal(err)
+	}
 
 	teamCount := []int{0, 1, 10, 30, 50, 100, 150, 300, 500, 1000, 10000}
 	for _, count := range teamCount {
@@ -211,7 +215,7 @@ func BenchmarkAuthorizedProjectPreparedQueryWithIncreasingPolicies(b *testing.B)
 
 	for _, policyCount := range policyCounts {
 		policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policies,
 			"roles":    roles,
 		})
@@ -219,7 +223,7 @@ func BenchmarkAuthorizedProjectPreparedQueryWithIncreasingPolicies(b *testing.B)
 		b.Run(fmt.Sprintf("store with %d chef-managed policies and %d custom policies", len(chefPolicies), policyCount),
 			func(b *testing.B) {
 				for n := 0; n < b.N; n++ {
-					r = s.makeAuthorizedProjectPreparedQuery(ctx)
+					r = s.publishPolicies(ctx, store)
 					if r != nil {
 						b.Error(r)
 					}
@@ -252,11 +256,11 @@ func BenchmarkProjectsAuthorizedWithIncreasingPolicies(b *testing.B) {
 	for _, policyCount := range policyCounts {
 		policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
 
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policies,
 			"roles":    roles,
 		})
-		err = s.makeAuthorizedProjectPreparedQuery(ctx)
+		err = s.publishPolicies(ctx, store)
 		require.NoError(b, err, "update OPA store and prepare projects query")
 
 		b.Run(fmt.Sprintf("store with %d custom policies and %d custom roles", policyCount, roleCount), func(b *testing.B) {
@@ -301,11 +305,11 @@ func BenchmarkFilterAuthorizedProjectsWithIncreasingPolicies(b *testing.B) {
 	for _, policyCount := range policyCounts {
 		policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
 
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policies,
 			"roles":    roles,
 		})
-		err = s.makeAuthorizedProjectPreparedQuery(ctx)
+		err = s.publishPolicies(ctx, store)
 		require.NoError(b, err, "update OPA store and prepare projects query")
 
 		b.Run(fmt.Sprintf("store with %d custom policies and %d custom roles", policyCount, roleCount), func(b *testing.B) {
@@ -347,7 +351,7 @@ func BenchmarkAuthorizedProjectPreparedQueryWithIncreasingRoles(b *testing.B) {
 
 	for _, roleCount := range roleCounts {
 		policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policies,
 			"roles":    roles,
 		})
@@ -355,7 +359,7 @@ func BenchmarkAuthorizedProjectPreparedQueryWithIncreasingRoles(b *testing.B) {
 		b.Run(fmt.Sprintf("store with %d custom roles and %d custom policies", roleCount, policyCount),
 			func(b *testing.B) {
 				for n := 0; n < b.N; n++ {
-					r = s.makeAuthorizedProjectPreparedQuery(ctx)
+					r = s.publishPolicies(ctx, store)
 					if r != nil {
 						b.Error(r)
 					}
@@ -384,12 +388,12 @@ func BenchmarkProjectsAuthorizedWithIncreasingRoles(b *testing.B) {
 
 	for _, roleCount := range roleCounts {
 		policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policies,
 			"roles":    roles,
 		})
 
-		err = s.makeAuthorizedProjectPreparedQuery(ctx)
+		err = s.publishPolicies(ctx, store)
 		require.NoError(b, err, "prepared authorized project query")
 
 		b.Run(fmt.Sprintf("store with %d custom roles and %d custom policies", roleCount, policyCount), func(b *testing.B) {
@@ -430,12 +434,12 @@ func BenchmarkFilterAuthorizedProjectsWithIncreasingRoles(b *testing.B) {
 
 	for _, roleCount := range roleCounts {
 		policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policies,
 			"roles":    roles,
 		})
 
-		err = s.makeAuthorizedProjectPreparedQuery(ctx)
+		err = s.publishPolicies(ctx, store)
 		require.NoError(b, err, "prepared authorized project query")
 
 		b.Run(fmt.Sprintf("store with %d custom roles and %d custom policies", roleCount, policyCount), func(b *testing.B) {
@@ -475,12 +479,12 @@ func BenchmarkProjectsAuthorizedWithIncreasingProjects(b *testing.B) {
 
 		_, roleMap := baselinePoliciesAndRoles()
 
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policyMap,
 			"roles":    roleMap,
 		})
 
-		err = s.makeAuthorizedProjectPreparedQuery(ctx)
+		err = s.publishPolicies(ctx, store)
 		require.NoError(b, err, "prepared authorized project query")
 
 		b.Run(fmt.Sprintf("store with %d projects, %d policies, and %d roles", projCount, len(policyMap), len(roleMap)), func(b *testing.B) {
@@ -524,12 +528,12 @@ func BenchmarkFilterAuthorizedProjectsIncreasingProjects(b *testing.B) {
 
 		_, roleMap := baselinePoliciesAndRoles()
 
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policyMap,
 			"roles":    roleMap,
 		})
 
-		err = s.makeAuthorizedProjectPreparedQuery(ctx)
+		err = s.publishPolicies(ctx, store)
 		require.NoError(b, err, "prepared authorized project query")
 
 		b.Run(fmt.Sprintf("store with %d projects, %d policies, and %d roles", projectCount, len(policyMap), len(roleMap)), func(b *testing.B) {
@@ -565,12 +569,12 @@ func BenchmarkProjectsAuthorizedWithIncreasingSubjects(b *testing.B) {
 	roleCount := 10
 
 	policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
-	s.store = inmem.NewFromObject(map[string]interface{}{
+	store := inmem.NewFromObject(map[string]interface{}{
 		"policies": policies,
 		"roles":    roles,
 	})
 
-	err = s.makeAuthorizedProjectPreparedQuery(ctx)
+	err = s.publishPolicies(ctx, store)
 	require.NoError(b, err, "prepared authorized project query")
 
 	subjectCounts := []int{0, 1, 10, 30, 50, 100, 150, 300, 500, 1000, 10000}
@@ -618,12 +622,12 @@ func BenchmarkFilterAuthorizedProjectsWithIncreasingSubjects(b *testing.B) {
 	roleCount := 10
 
 	policies, roles := baselineAndRandomPoliciesAndRoles(policyCount, roleCount)
-	s.store = inmem.NewFromObject(map[string]interface{}{
+	store := inmem.NewFromObject(map[string]interface{}{
 		"policies": policies,
 		"roles":    roles,
 	})
 
-	err = s.makeAuthorizedProjectPreparedQuery(ctx)
+	err = s.publishPolicies(ctx, store)
 	require.NoError(b, err, "prepared authorized project query")
 
 	subjectCounts := []int{0, 1, 10, 30, 50, 100, 150, 300, 500, 1000, 10000}
@@ -698,11 +702,11 @@ func BenchmarkAuthorizedProjectsIncreasingMembershipFrequency(b *testing.B) {
 		}
 	}
 
-	s.store = inmem.NewFromObject(map[string]interface{}{
+	store := inmem.NewFromObject(map[string]interface{}{
 		"policies": policies,
 		"roles":    roles,
 	})
-	err = s.makeAuthorizedProjectPreparedQuery(ctx)
+	err = s.publishPolicies(ctx, store)
 	require.NoError(b, err, "update OPA store and prepare projects query")
 
 	b.Run("store with 0 policies that include the subject as a member", func(b *testing.B) {
@@ -726,11 +730,11 @@ func BenchmarkAuthorizedProjectsIncreasingMembershipFrequency(b *testing.B) {
 		pol["members"] = engine.MakeSubjects(engine.Subject(member))
 
 		// refresh store to reflect policies with the subject as a member
-		s.store = inmem.NewFromObject(map[string]interface{}{
+		store := inmem.NewFromObject(map[string]interface{}{
 			"policies": policies,
 			"roles":    roles,
 		})
-		err = s.makeAuthorizedProjectPreparedQuery(ctx)
+		err = s.publishPolicies(ctx, store)
 		require.NoError(b, err, "update OPA store and prepare projects query")
 
 		b.Run(fmt.Sprintf("store with %d out of %d policies that include the subject as a member", k+1, policyCount), func(b *testing.B) {
